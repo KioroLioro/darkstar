@@ -2,20 +2,9 @@
 -- Area: King Ranperres Tomb
 --  MOB: Rock Eater
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-
------------------------------------
--- onMobInitialize
------------------------------------
-
-function onMobInitialize(mob)
-end;
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkGoVregime(player,mob,634,2);
+    dsp.regime.checkRegime(player, mob, 634, 2, dsp.regime.type.GROUNDS)
 end;

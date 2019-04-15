@@ -29,6 +29,7 @@
 
 #include "latent_effect.h"
 #include "entities/petentity.h"
+#include "items/item_armor.h"
 
 /************************************************************************
 *                                                                       *
@@ -64,10 +65,13 @@ public:
 	void CheckLatentsZone();
     void CheckLatentsWeather();
     void CheckLatentsWeather(uint16 weather);
+    void CheckLatentsTargetChange();
 
-	void AddLatentEffect(CLatentEffect LatentEffect);
-	void AddLatentEffects(std::vector<CLatentEffect>& latentList, uint8 reqLvl, uint8 slot);
-	void DelLatentEffects(uint8 reqLvl, uint8 slot);
+	void AddLatentEffects(std::vector<CItemArmor::itemLatent>& latentList, uint8 reqLvl, uint8 slot);
+    void DelLatentEffects(uint8 reqLvl, uint8 slot);
+
+    void AddLatentEffect(LATENT conditionID, uint16 conditionValue, Mod modID, int16 modValue);
+    bool DelLatentEffect(LATENT conditionID, uint16 conditionValue, Mod modID, int16 modValue);
 
 	 CLatentEffectContainer(CCharEntity* PEntity);
 
@@ -76,9 +80,9 @@ private:
 	CCharEntity* m_POwner;
 	std::vector<CLatentEffect>	m_LatentEffectList;
 
-    void ProcessLatentEffects(std::function <void(CLatentEffect&)> logic);
-    void ProcessLatentEffect(CLatentEffect& latentEffect);
-    void ApplyLatentEffect(CLatentEffect& effect, bool expression);
+    void ProcessLatentEffects(std::function <bool(CLatentEffect&)> logic);
+    bool ProcessLatentEffect(CLatentEffect& latentEffect);
+    bool ApplyLatentEffect(CLatentEffect& effect, bool expression);
 };
 
 #endif

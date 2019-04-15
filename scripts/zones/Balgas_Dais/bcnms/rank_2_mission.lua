@@ -3,11 +3,9 @@
 -- Name: Mission Rank 2
 -- !pos 299 -123 345 146
 -----------------------------------
-package.loaded["scripts/zones/Balgas_Dais/TextIDs"] = nil;
--------------------------------------
 
 require("scripts/globals/keyitems");
-require("scripts/zones/Balgas_Dais/TextIDs");
+local ID = require("scripts/zones/Balgas_Dais/IDs");
 
 -----------------------------------
 
@@ -32,12 +30,12 @@ function onBcnmLeave(player,instance,leavecode)
 
     if (leavecode == 2) then -- play end CS. Need time and battle id for record keeping + storage
         if (player:hasCompletedMission(player:getNation(),5)) then
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,0,1);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,0,1);
         else
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,0,0);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,0,0);
         end
     elseif (leavecode == 4) then
-        player:startEvent(0x7d02);
+        player:startEvent(32002);
     end
 
 end;
@@ -49,12 +47,12 @@ end;
 function onEventFinish(player,csid,option)
 -- print("bc finish csid "..csid.." and option "..option);
 
-    if (csid == 0x7d01) then
-        if (player:hasKeyItem(DARK_KEY)) then
-            player:addKeyItem(KINDRED_CREST);
-            player:messageSpecial(KEYITEM_OBTAINED,KINDRED_CREST);
+    if (csid == 32001) then
+        if (player:hasKeyItem(dsp.ki.DARK_KEY)) then
+            player:addKeyItem(dsp.ki.KINDRED_CREST);
+            player:messageSpecial(ID.text.KEYITEM_OBTAINED,dsp.ki.KINDRED_CREST);
             player:setVar("MissionStatus",9);
-            player:delKeyItem(DARK_KEY);
+            player:delKeyItem(dsp.ki.DARK_KEY);
         end
     end
 

@@ -1,31 +1,9 @@
 -----------------------------------
 -- Area: Castle Oztroja (151)
---  MOB: Yaa_Haqa_the_Profane
+--   NM: Yaa_Haqa_the_Profane
 -----------------------------------
-
------------------------------------
--- onMobDeath
+mixins = {require("scripts/mixins/job_special")}
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-end;
-
------------------------------------
--- onMobDespawn
------------------------------------
-
-function onMobDespawn(mob)
-
-    -- Set Yaa_Haqa_the_Profane's Window Open Time
-    local wait = math.random(3600,7200);
-    SetServerVariable("[POP]Yaa_Haqa_the_Profane", os.time() + wait); -- 1-2 hours
-    DisallowRespawn(mob:getID(), true);
-
-    -- Set PH back to normal, then set to respawn spawn
-    local PH = GetServerVariable("[PH]Yaa_Haqa_the_Profane");
-    SetServerVariable("[PH]Yaa_Haqa_the_Profane", 0);
-    DisallowRespawn(PH, false);
-    GetMobByID(PH):setRespawnTime(GetMobRespawnTime(PH));
-
-end;
-
+end

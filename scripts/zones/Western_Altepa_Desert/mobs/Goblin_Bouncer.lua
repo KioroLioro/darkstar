@@ -2,13 +2,9 @@
 -- Area: Western Altepa Desert
 --  MOB: Goblin Bouncer
 -----------------------------------
-
-require("scripts/globals/fieldsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkRegime(player,mob,137,1);
-end;
+    dsp.regime.checkRegime(player, mob, 137, 1, dsp.regime.type.FIELDS)
+end

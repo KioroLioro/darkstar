@@ -187,7 +187,7 @@ void CZoneEntities::FindPartyForMob(CBaseEntity* PEntity)
             if (PCurrentMob->allegiance == PMob->allegiance &&
                 (forceLink ||
                     PCurrentMob->m_Family == PMob->m_Family ||
-                    sublink && sublink == PCurrentMob->getMobMod(MOBMOD_SUBLINK)))
+                    (sublink && sublink == PCurrentMob->getMobMod(MOBMOD_SUBLINK))))
             {
 
                 if (PCurrentMob->PMaster == nullptr || PCurrentMob->PMaster->objtype == TYPE_MOB)
@@ -209,8 +209,23 @@ void CZoneEntities::TransportDepart(uint16 boundary, uint16 zone)
 
         if (PCurrentChar->loc.boundary == boundary)
         {
+            if (PCurrentChar->m_event.Target != nullptr)
+            {
+                //The player talked to one of the guys on the boat, and the event target is wrong.
+                //This leads to the wrong script being loaded and you get stuck on a black screen
+                //instead of loading into the port.
+                
+                //Attempt to load the proper script
+                PCurrentChar->m_event.Target = nullptr;
+                size_t deleteStart = PCurrentChar->m_event.Script.find("npcs/");
+                size_t deleteEnd = PCurrentChar->m_event.Script.find(".lua");
+
+                if (deleteStart != std::string::npos && deleteEnd != std::string::npos)
+                    PCurrentChar->m_event.Script.replace(deleteStart, deleteEnd - deleteStart, "Zone");
+            }
             luautils::OnTransportEvent(PCurrentChar, zone);
         }
+            
     }
 }
 
@@ -228,7 +243,7 @@ void CZoneEntities::WeatherChange(WEATHER weather)
             PCurrentMob->m_disableScent = (weather == WEATHER_RAIN || weather == WEATHER_SQUALL || weather == WEATHER_BLIZZARDS);
         }
 
-        if (PCurrentMob->m_EcoSystem == SYSTEM_ELEMENTAL && PCurrentMob->PMaster == nullptr && PCurrentMob->m_SpawnType == SPAWNTYPE_WEATHER)
+        if (PCurrentMob->m_EcoSystem == SYSTEM_ELEMENTAL && PCurrentMob->PMaster == nullptr && PCurrentMob->m_SpawnType & SPAWNTYPE_WEATHER)
         {
             if (PCurrentMob->m_Element == element)
             {
@@ -242,7 +257,7 @@ void CZoneEntities::WeatherChange(WEATHER weather)
                 PCurrentMob->m_AllowRespawn = false;
             }
         }
-        else if (PCurrentMob->m_SpawnType == SPAWNTYPE_FOG)
+        else if (PCurrentMob->m_SpawnType & SPAWNTYPE_FOG)
         {
             if (weather == WEATHER_FOG)
             {
@@ -442,7 +457,7 @@ void CZoneEntities::SpawnMOBs(CCharEntity* PChar)
 
             CMobController* PController = static_cast<CMobController*>(PCurrentMob->PAI->GetController());
 
-            bool validAggro = expGain > 50 || PChar->animation == ANIMATION_HEALING || PCurrentMob->getMobMod(MOBMOD_ALWAYS_AGGRO);
+            bool validAggro = expGain > 50 || PChar->isSitting() || PCurrentMob->getMobMod(MOBMOD_ALWAYS_AGGRO);
 
             if (validAggro && PController->CanAggroTarget(PChar))
             {
@@ -645,7 +660,7 @@ CBaseEntity* CZoneEntities::GetEntity(uint16 targid, uint8 filter)
     }
     else if (targid < 0x800)
     {
-        if (filter & TYPE_PET)
+        if (filter & TYPE_PET || filter & TYPE_TRUST)
         {
             EntityList_t::const_iterator it = m_petList.find(targid);
             if (it != m_petList.end())
@@ -674,7 +689,7 @@ void CZoneEntities::TOTDChange(TIMETYPE TOTD)
             {
                 CMobEntity* PMob = (CMobEntity*)it->second;
 
-                if (PMob->m_SpawnType == SPAWNTYPE_ATNIGHT)
+                if (PMob->m_SpawnType & SPAWNTYPE_ATNIGHT)
                 {
                     PMob->SetDespawnTime(1ms);
                     PMob->m_AllowRespawn = false;
@@ -690,7 +705,7 @@ void CZoneEntities::TOTDChange(TIMETYPE TOTD)
             {
                 CMobEntity* PMob = (CMobEntity*)it->second;
 
-                if (PMob->m_SpawnType == SPAWNTYPE_ATEVENING)
+                if (PMob->m_SpawnType & SPAWNTYPE_ATEVENING)
                 {
                     PMob->SetDespawnTime(1ms);
                     PMob->m_AllowRespawn = false;
@@ -716,7 +731,7 @@ void CZoneEntities::TOTDChange(TIMETYPE TOTD)
             {
                 CMobEntity* PMob = (CMobEntity*)it->second;
 
-                if (PMob->m_SpawnType == SPAWNTYPE_ATEVENING)
+                if (PMob->m_SpawnType & SPAWNTYPE_ATEVENING)
                 {
                     PMob->SetDespawnTime(0s);
                     PMob->m_AllowRespawn = true;
@@ -731,7 +746,7 @@ void CZoneEntities::TOTDChange(TIMETYPE TOTD)
             {
                 CMobEntity* PMob = (CMobEntity*)it->second;
 
-                if (PMob->m_SpawnType == SPAWNTYPE_ATNIGHT)
+                if (PMob->m_SpawnType & SPAWNTYPE_ATNIGHT)
                 {
                     PMob->SetDespawnTime(0s);
                     PMob->m_AllowRespawn = true;
@@ -740,6 +755,8 @@ void CZoneEntities::TOTDChange(TIMETYPE TOTD)
             }
         }
         break;
+        default:
+            break;
     }
     if (ScriptType != SCRIPT_NONE)
     {
@@ -769,7 +786,7 @@ CCharEntity* CZoneEntities::GetCharByName(int8* name)
         for (EntityList_t::const_iterator it = m_charList.begin(); it != m_charList.end(); ++it)
         {
             CCharEntity* PCurrentChar = (CCharEntity*)it->second;
-            if (stricmp(PCurrentChar->GetName(), name) == 0)
+            if (stricmp((char*)PCurrentChar->GetName(), (const char*)name) == 0)
             {
                 return PCurrentChar;
             }
@@ -817,12 +834,16 @@ void CZoneEntities::PushPacket(CBaseEntity* PEntity, GLOBAL_MESSAGE_TYPE message
             }
             case CHAR_INRANGE:
             {
+                // todo: rewrite packet handlers and use enums instead of rawdog packet ids
+                // 30 yalms if action packet, 50 otherwise
+                const int checkDistanceSq = packet->id() == 0x0028 ? 900 : 2500;
+
                 for (EntityList_t::const_iterator it = m_charList.begin(); it != m_charList.end(); ++it)
                 {
                     CCharEntity* PCurrentChar = (CCharEntity*)it->second;
                     if (PEntity != PCurrentChar)
                     {
-                        if (distance(PEntity->loc.p, PCurrentChar->loc.p) < 50 &&
+                        if (distanceSquared(PEntity->loc.p, PCurrentChar->loc.p) < checkDistanceSq &&
                             ((PEntity->objtype != TYPE_PC) || (((CCharEntity*)PEntity)->m_moghouseID == PCurrentChar->m_moghouseID)))
                         {
                             if (packet->id() == 0x00E &&

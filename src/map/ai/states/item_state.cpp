@@ -43,9 +43,9 @@ This file is part of DarkStar-server source code.
 CItemState::CItemState(CCharEntity* PEntity, uint16 targid, uint8 loc, uint8 slotid) :
     CState(PEntity, targid),
     m_PEntity(PEntity),
+    m_PItem(nullptr),
     m_location(loc),
-    m_slot(slotid),
-    m_PItem(nullptr)
+    m_slot(slotid)
 {
     auto PItem = dynamic_cast<CItemUsable*>(m_PEntity->getStorage(loc)->GetItem(slotid));
     m_PItem = PItem;
@@ -85,19 +85,20 @@ CItemState::CItemState(CCharEntity* PEntity, uint16 targid, uint8 loc, uint8 slo
         throw CStateInitException(std::move(m_errorMsg));
     }
 
-    auto error = luautils::OnItemCheck(PTarget, m_PItem);
-
+    auto [error, param, value] = luautils::OnItemCheck(PTarget, m_PItem, ITEMCHECK::NONE, m_PEntity);
     if (error || m_PEntity->StatusEffectContainer->HasPreventActionEffect())
     {
-        auto param = m_PItem->getFlag() & ITEM_FLAG_SCROLL ? m_PItem->getSubID() : m_PItem->getID();
-
         if (error == -1)
         {
             throw CStateInitException(nullptr);
         }
         else
         {
-            throw CStateInitException(std::make_unique<CMessageBasicPacket>(m_PEntity, m_PEntity, param, 0, error == -1 ? 0 : error));
+            if (value == 0)
+            {
+                param = m_PItem->getFlag() & ITEM_FLAG_SCROLL ? m_PItem->getSubID() : m_PItem->getID();
+            }
+            throw CStateInitException(std::make_unique<CMessageBasicPacket>(m_PEntity, PTarget ? PTarget : m_PEntity, param, value, error));
         }
     }
 
@@ -168,7 +169,7 @@ void CItemState::Cleanup(time_point tick)
 {
     m_PEntity->UContainer->Clean();
 
-    if (m_interrupted && !m_PItem->isType(ITEM_ARMOR))
+    if ((m_interrupted || !IsCompleted()) && !m_PItem->isType(ITEM_ARMOR))
         m_PItem->setSubType(ITEM_UNLOCKED);
 
     auto PItem = m_PEntity->getStorage(m_location)->GetItem(m_slot);

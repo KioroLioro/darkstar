@@ -5,16 +5,5 @@
 -- !pos -18 -8 124 197
 -----------------------------------
 
------------------------------------
--- OnMobSpawn Action
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- OnMobDeath Action
------------------------------------
-
 function onMobDeath(mob, player, isKiller)
 end;

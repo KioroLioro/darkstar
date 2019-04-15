@@ -3,14 +3,9 @@
 -- Name: warriors_path
 -- bcnmID : 993
 -----------------------------------
-package.loaded["scripts/zones/Sealions_Den/TextIDs"] = nil;
------------------------------------
-
 require("scripts/globals/titles");
 require("scripts/globals/keyitems");
 require("scripts/globals/missions");
-require("scripts/zones/Sealions_Den/TextIDs");
-
 -----------------------------------
  --Tarutaru
 --Tenzen                                                    group 860   3875
@@ -47,27 +42,27 @@ function onBcnmLeave(player,instance,leavecode)
     if (leavecode == 2) then -- play end CS. Need time and battle id for record keeping + storage
         player:addExp(1000);
         if (player:getCurrentMission(COP) == THE_WARRIOR_S_PATH) then
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,1,0);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,1,0);
             player:setVar("PromathiaStatus",0);
             player:completeMission(COP,THE_WARRIOR_S_PATH);
             player:addMission(COP,GARDEN_OF_ANTIQUITY);
         else
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,1,1);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,1,1);
         end
     elseif (leavecode == 4) then
-           player:startEvent(0x7d02);
-   end
+        player:startEvent(32002);
+    end
 
 end;
 
 function onEventUpdate(player,csid,option)
--- print("bc update csid "..csid.." and option "..option);
+    -- print("bc update csid "..csid.." and option "..option);
 end;
 
 function onEventFinish(player,csid,option)
--- print("bc finish csid "..csid.." and option "..option);
-    if (csid == 0x7d01) then
-       player:setPos(-25,-1 ,-620 ,208 ,33);-- al'taieu
-       player:addTitle(THE_CHEBUKKIS_WORST_NIGHTMARE);
+    -- print("bc finish csid "..csid.." and option "..option);
+    if (csid == 32001) then
+        player:setPos(-25,-1 ,-620 ,208 ,33);-- al'taieu
+        player:addTitle(dsp.title.THE_CHEBUKKIS_WORST_NIGHTMARE);
     end
 end;

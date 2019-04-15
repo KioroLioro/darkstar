@@ -1,26 +1,14 @@
 -----------------------------------
---  Area: Northern San d'Oria
+-- Area: Northern San d'Oria
 --   NPC: Durogg
---  Type: Past Event Watcher
--- @zone 231
--- !pos 15 0 -18
+-- Type: Past Event Watcher
+-- !pos 15 0 -18 231
 -----------------------------------
-
-package.loaded["scripts/zones/Northern_San_dOria/TextIDs"] = nil;
-
-require("scripts/zones/Northern_San_dOria/TextIDs");
 require("scripts/globals/quests");
-
------------------------------------
--- onTrade Action
 -----------------------------------
 
 function onTrade(player,npc,trade)
 end;
-
------------------------------------
--- onTrigger Action
------------------------------------
 
 function onTrigger(player,npc)
 
@@ -49,16 +37,10 @@ function onTrigger(player,npc)
         gil = 0; -- Setting gil to a value less than 10(cost) will trigger the appropriate response from this npc.
     end
 
-    player:startEvent(0x0361,AddonScenarios,SeekersOfAdoulin,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,10,gil); -- CSID,Missions,Fame,?,?,?,?,Cost,TotalGilPlayerHas
+    player:startEvent(865,AddonScenarios,SeekersOfAdoulin,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,10,gil); -- CSID,Missions,Fame,?,?,?,?,Cost,TotalGilPlayerHas
 end;
 
------------------------------------
--- onEventUpdate
------------------------------------
-
 function onEventUpdate(player,csid,option)
-    -- printf("CSID: %u",csid);
-    -- printf("RESULT: %u",option);
 
     if (player:delGil(10) == false) then
         player:setLocalVar("Durogg_PlayCutscene", 2) ; -- Cancel the cutscene.
@@ -68,17 +50,11 @@ function onEventUpdate(player,csid,option)
     end
 end;
 
------------------------------------
--- onEventFinish
------------------------------------
-
 function onEventFinish(player,csid,option)
-    -- printf("CSID: %u",csid);
-    -- printf("RESULT: %u",option);
 
     if (player:getLocalVar("Durogg_PlayCutscene") < 2) then
         if (   option ==   1) then        -- Drenched! It Began with a Raindrop
-            player:startEvent(0x7549,0,0,0,0,0,0,231);
+            player:startEvent(30025,0,0,0,0,0,0,231);
 --        elseif (option ==   2) then        -- Hasten! In a Jam in Jeuno?
 --            player:startEvent(CSID,0,0,0,0,0,0,231);
 --        elseif (option ==  33) then        -- Rumors from the West

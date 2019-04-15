@@ -3,36 +3,15 @@
 --  MOB: Goblin Mercenary
 -- Note: Place Holder for Bloodthirster Madkix
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-require("scripts/zones/Kuftal_Tunnel/MobIDs");
-
------------------------------------
--- onMobDeath
+local ID = require("scripts/zones/Kuftal_Tunnel/IDs")
+require("scripts/globals/regimes")
+require("scripts/globals/mobs")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-
-    checkGoVregime(player,mob,740,2);
-
-end;
-
------------------------------------
--- onMobDespawn
------------------------------------
+    dsp.regime.checkRegime(player, mob, 740, 2, dsp.regime.type.GROUNDS)
+end
 
 function onMobDespawn(mob)
-    local mobID = mob:getID();
-
-    if (Bloodthirster_Madkix_PH[mobID] ~= nil) then
-        local ToD = GetServerVariable("[POP]Bloodthirster_Madkix");
-        if (ToD <= os.time() and GetMobAction(Bloodthirster_Madkix) == 0) then
-            if (math.random(1,20) == 5) then
-                UpdateNMSpawnPoint(Bloodthirster_Madkix);
-                GetMobByID(Bloodthirster_Madkix):setRespawnTime(GetMobRespawnTime(mobID));
-                SetServerVariable("[PH]Bloodthirster_Madkix", mobID);
-                DisallowRespawn(mobID, true);
-            end
-        end
-    end
-end;
+    dsp.mob.phOnDespawn(mob, ID.mob.BLOODTHIRSTER_MADKIX_PH, 5, math.random(7200, 28800)) -- 2 to 8 hours
+end

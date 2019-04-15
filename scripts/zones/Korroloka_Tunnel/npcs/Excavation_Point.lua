@@ -1,43 +1,20 @@
 -----------------------------------
---  Area: Korroloka Tunnel
---  NPC:  Excavation Point
+-- Area: Korroloka Tunnel
+--  NPC: Excavation Point
 -----------------------------------
-package.loaded["scripts/zones/Korroloka_Tunnel/TextIDs"] = nil;
--------------------------------------
-
-require("scripts/globals/excavation");
-require("scripts/zones/Korroloka_Tunnel/TextIDs");
-
------------------------------------
--- onTrade
+require("scripts/globals/helm")
 -----------------------------------
 
 function onTrade(player,npc,trade)
-    startExcavation(player,player:getZoneID(),npc,trade,0x0000);
-end;
-
------------------------------------
--- onTrigger
------------------------------------
+    dsp.helm.onTrade(player, npc, trade, dsp.helm.type.EXCAVATION, 0)
+end
 
 function onTrigger(player,npc)
-    player:messageSpecial(MINING_IS_POSSIBLE_HERE,605);
-end;
-
------------------------------------
--- onEventUpdate
------------------------------------
+    dsp.helm.onTrigger(player, dsp.helm.type.EXCAVATION)
+end
 
 function onEventUpdate(player,csid,option)
-    -- printf("CSID: %u",csid);
-    -- printf("RESULT: %u",option);
-end;
-
------------------------------------
--- onEventFinish
------------------------------------
+end
 
 function onEventFinish(player,csid,option)
-    -- printf("CSID: %u",csid);
-    -- printf("RESULT: %u",option);
-end;
+end

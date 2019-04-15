@@ -2,19 +2,10 @@
 -- Area: Dynamis Windurst
 --  MOB: Tzee Xicu Idol
 -----------------------------------
-
 require("scripts/globals/titles");
 require("scripts/globals/dynamis");
-
------------------------------------
--- onMobSpawn Action
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- onMobEngaged
+mixins = {require("scripts/mixins/job_special")};
+require("scripts/globals/status");
 -----------------------------------
 
 function onMobEngaged(mob,target)
@@ -28,16 +19,12 @@ function onMobEngaged(mob,target)
 
 end;
 
------------------------------------
--- onMobDeath
------------------------------------
-
 function onMobDeath(mob, player, isKiller)
 
     if (alreadyReceived(player,8) == false) then
         addDynamisList(player,128);
 
-        player:addTitle(DYNAMISWINDURST_INTERLOPER); -- Add title
+        player:addTitle(dsp.title.DYNAMISWINDURST_INTERLOPER); -- Add title
 
         local npc = GetNPCByID(17543480); -- Spawn ???
         npc:setPos(mob:getXPos(),mob:getYPos(),mob:getZPos());

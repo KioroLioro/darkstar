@@ -54,10 +54,6 @@ char **arg_v = NULL;
 char *SERVER_NAME = NULL;
 char  SERVER_TYPE = DARKSTAR_SERVER_NONE;
 
-#ifndef GITVERSION
-	static char dsp_git_version[1024] = "";
-#endif
-
 // Copyright (c) Athena Dev Teams 
 // Added by Gabuzomeu
 //
@@ -123,7 +119,7 @@ static void dump_backtrace(void)
 		// NOTE: gdb-7.8 has regression, either update or downgrade.
 		close(fd[0]);
 		char buf[255];
-		snprintf(buf, sizeof(buf), "gdb -p %d -n -batch -ex bt 2>/dev/null | sed -n '/<signal handler/{n;x;b};H;${x;p}' 1>&%d", getppid(), fd[1]);
+		snprintf(buf, sizeof(buf), "gdb -p %d -n -batch -ex generate-core-file -ex bt 2>/dev/null 1>&%d", getppid(), fd[1]);
 		execl("/bin/sh", "/bin/sh", "-c", buf, NULL);
 		ShowError ("Failed to launch gdb for backtrace");
 		_exit(EXIT_FAILURE);
@@ -160,6 +156,7 @@ static void sig_proc(int sn)
 				do_final(EXIT_SUCCESS);
 			runflag = 0;
 			break;
+		case SIGABRT:
 		case SIGSEGV:
 		case SIGFPE:
 			dump_backtrace();
@@ -192,6 +189,7 @@ void signals_init (void)
 	compat_signal(SIGTERM, sig_proc);
 	compat_signal(SIGINT, sig_proc);
 #ifndef _DEBUG // need unhandled exceptions to debug on Windows
+	compat_signal(SIGABRT, sig_proc);
 	compat_signal(SIGSEGV, sig_proc);
 	compat_signal(SIGFPE, sig_proc);
 #endif
@@ -204,50 +202,6 @@ void signals_init (void)
 #endif
 }
 
-#ifdef GITVERSION
-#define xstringify(x) stringify(x)
-#define stringify(x) #x
-const char* get_git_revision(void)
-{
-    return xstringify(GITVERSION);
-}
-#else
-
-/************************************************************************
-*																		*
-*																		*
-*																		*
-************************************************************************/
-
-const char* get_git_revision(void)
-{
-    FILE *fp = NULL;
-
-    // GIT_VER was copied in to working dir post-build
-    if ((fp = fopen("GIT_VER", "r")) != NULL)
-    {
-        int8 line[1024], w1[1024], w2[1024];
-
-        if (fgets(line, 1024, fp) == nullptr)
-        {
-            ShowError("fgets failed for git revision: %s", strerror(errno));
-            _exit(EXIT_FAILURE);
-        }
-        sscanf(line, "%[a-zA-Z0-9] %[^\t\r\n]", w1, w2);
-        snprintf(dsp_git_version, sizeof(dsp_git_version), "%s", w1);
-        fclose(fp);
-    }
-
-    // If no version was found, mark as unknown..
-    if (!(*dsp_git_version))
-    {
-        snprintf(dsp_git_version, sizeof(dsp_git_version), "Unknown");
-    }
-    
-    return dsp_git_version;
-}
-#endif
-
 /************************************************************************
 *																		*
 *  CORE : Display title													*
@@ -256,7 +210,7 @@ const char* get_git_revision(void)
 
 static void display_title(void)
 {
-	ShowInfo("DarkStar - Git Revision Hash: " CL_WHITE"%s" CL_RESET".\n", get_git_revision());
+	ShowInfo("DarkStar");
 }
 
 /************************************************************************

@@ -40,7 +40,9 @@ CMobSkill::CMobSkill(uint16 id)
     m_primarySkillchain = 0;
     m_secondarySkillchain = 0;
     m_tertiarySkillchain = 0;
+    m_TP = 0;
     m_HPP = 0;
+    m_knockback = 0;
 }
 
 bool CMobSkill::hasMissMsg() const
@@ -102,13 +104,13 @@ void CMobSkill::setAnimationID(uint16 animID)
 
 const int8* CMobSkill::getName() const
 {
-	return m_name.c_str();
+	return (const int8*)m_name.c_str();
 }
 
 void CMobSkill::setName(int8* name)
 {
 	m_name.clear();
-	m_name.insert(0,name);
+	m_name.insert(0, (const char*)name);
 }
 
 void CMobSkill::setAoe(uint8 aoe)

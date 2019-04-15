@@ -2,13 +2,9 @@
 -- Area: Gusgen Mines
 --  MOB: Ore Eater
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkGoVregime(player,mob,681,1);
+    dsp.regime.checkRegime(player, mob, 681, 1, dsp.regime.type.GROUNDS)
 end;

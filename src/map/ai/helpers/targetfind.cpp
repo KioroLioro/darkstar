@@ -147,7 +147,7 @@ void CTargetFind::findWithinArea(CBattleEntity* PTarget, AOERADIUS radiusType, f
         }
 
         if (m_findFlags & FINDFLAGS_HIT_ALL ||
-            m_findType == FIND_MONSTER_PLAYER && ((CMobEntity*)m_PBattleEntity)->CalledForHelp())
+            (m_findType == FIND_MONSTER_PLAYER && ((CMobEntity*)m_PBattleEntity)->CalledForHelp()))
         {
             addAllInZone(m_PMasterTarget, withPet);
         }
@@ -205,18 +205,17 @@ void CTargetFind::findWithinCone(CBattleEntity* PTarget, float distance, float a
 
 void CTargetFind::addAllInMobList(CBattleEntity* PTarget, bool withPet)
 {
-    CCharEntity* PChar = (CCharEntity*)findMaster(m_PBattleEntity);
-    CBattleEntity* PBattleTarget = nullptr;
-
-    for (SpawnIDList_t::const_iterator it = PChar->SpawnMOBList.begin(); it != PChar->SpawnMOBList.end(); ++it)
+    CCharEntity* PChar = dynamic_cast<CCharEntity*>(findMaster(m_PBattleEntity));
+    if (PChar)
     {
-
-        PBattleTarget = (CBattleEntity*)it->second;
-
-        if (PBattleTarget && isMobOwner(PBattleTarget)){
-            addEntity(PBattleTarget, withPet);
+        for (SpawnIDList_t::const_iterator it = PChar->SpawnMOBList.begin(); it != PChar->SpawnMOBList.end(); ++it)
+        {
+            CBattleEntity* PBattleTarget = dynamic_cast<CBattleEntity*>(it->second);
+            if (PBattleTarget && isMobOwner(PBattleTarget))
+            {
+                addEntity(PBattleTarget, withPet);
+            }
         }
-
     }
 }
 
@@ -236,8 +235,6 @@ void CTargetFind::addAllInZone(CBattleEntity* PTarget, bool withPet)
 
 void CTargetFind::addAllInAlliance(CBattleEntity* PTarget, bool withPet)
 {
-    CParty* party = nullptr;
-
     PTarget->ForAlliance([this, withPet](CBattleEntity* PMember)
     {
         addEntity(PMember, withPet);
@@ -338,7 +335,7 @@ bool CTargetFind::validEntity(CBattleEntity* PTarget)
         return false;
     }
 
-    if (m_PTarget == PTarget || PTarget->getZone() != m_zone || PTarget->IsNameHidden())
+    if (m_PTarget == PTarget || PTarget->getZone() != m_zone || PTarget->IsNameHidden() || PTarget->status == STATUS_INVISIBLE)
     {
         return false;
     }

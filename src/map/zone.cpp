@@ -47,6 +47,7 @@
 
 #include "entities/npcentity.h"
 #include "entities/petentity.h"
+#include "entities/automatonentity.h"
 
 #include "lua/luautils.h"
 
@@ -212,7 +213,7 @@ uint32 CZone::GetWeatherChangeTime()
 
 const int8* CZone::GetName()
 {
-    return m_zoneName.c_str();
+    return (const int8*)m_zoneName.c_str();
 }
 
 uint8 CZone::GetSoloBattleMusic()
@@ -268,7 +269,7 @@ zoneLine_t* CZone::GetZoneLine(uint32 zoneLineID)
 
 void CZone::LoadZoneLines()
 {
-    static const int8 fmtQuery[] = "SELECT zoneline, tozone, tox, toy, toz, rotation FROM zonelines WHERE fromzone = %u";
+    static const char fmtQuery[] = "SELECT zoneline, tozone, tox, toy, toz, rotation FROM zonelines WHERE fromzone = %u";
 
     int32 ret = Sql_Query(SqlHandle, fmtQuery, m_zoneID);
 
@@ -298,7 +299,7 @@ void CZone::LoadZoneLines()
 
 void CZone::LoadZoneWeather()
 {
-    static const int8* Query =
+    static const char* Query =
         "SELECT "
         "weather_day,"
         "normal,"
@@ -332,7 +333,7 @@ void CZone::LoadZoneWeather()
 
 void CZone::LoadZoneSettings()
 {
-    static const int8* Query =
+    static const char* Query =
         "SELECT "
         "zone.name,"
         "zone.zoneip,"
@@ -355,9 +356,9 @@ void CZone::LoadZoneSettings()
         Sql_NumRows(SqlHandle) != 0 &&
         Sql_NextRow(SqlHandle) == SQL_SUCCESS)
     {
-        m_zoneName.insert(0, Sql_GetData(SqlHandle, 0));
+        m_zoneName.insert(0, (const char*)Sql_GetData(SqlHandle, 0));
 
-        m_zoneIP = inet_addr(Sql_GetData(SqlHandle, 1));
+        m_zoneIP = inet_addr((const char*)Sql_GetData(SqlHandle, 1));
         m_zonePort = (uint16)Sql_GetUIntData(SqlHandle, 2);
         m_zoneMusic.m_songDay = (uint8)Sql_GetUIntData(SqlHandle, 3);   // background music (day)
         m_zoneMusic.m_songNight = (uint8)Sql_GetUIntData(SqlHandle, 4);   // background music (night)
@@ -390,7 +391,7 @@ void CZone::LoadNavMesh()
         m_navMesh = new CNavMesh((uint16)GetID());
     }
 
-    int8 file[255];
+    char file[255];
     memset(file, 0, sizeof(file));
     snprintf(file, sizeof(file), "navmeshes/%s.nav", GetName());
 
@@ -494,7 +495,7 @@ void CZone::SetWeather(WEATHER weather)
     m_Weather = weather;
     m_WeatherChangeTime = CVanaTime::getInstance()->getVanaTime();
 
-    m_zoneEntities->PushPacket(nullptr, CHAR_INZONE, new CWeatherPacket(m_WeatherChangeTime, m_Weather));
+    m_zoneEntities->PushPacket(nullptr, CHAR_INZONE, new CWeatherPacket(m_WeatherChangeTime, m_Weather, dsprand::GetRandomNumber(4, 28)));
 }
 
 void CZone::UpdateWeather()
@@ -504,11 +505,10 @@ void CZone::UpdateWeather()
     uint32 EndFogVanaDate = StartFogVanaDate + (VTIME_HOUR * 5); // Vanadiel timestamp of 7 AM in minutes
     uint32 WeatherNextUpdate = 0;
     uint32 WeatherDay = 0;
-    uint8 WeatherOffset = 0;
     uint8 WeatherChance = 0;
 
     // Random time between 3 minutes and 30 minutes for the next weather change
-    WeatherNextUpdate = (dsprand::GetRandomNumber(180, 1620));
+    WeatherNextUpdate = (dsprand::GetRandomNumber(180, 1801));
 
     // Find the timestamp since the start of vanadiel
     WeatherDay = CVanaTime::getInstance()->getVanaTime();
@@ -538,11 +538,11 @@ void CZone::UpdateWeather()
 
     // 15% chance for rare weather, 35% chance for common weather, 50% chance for normal weather
     // * Percentages were generated from a 6 hour sample and rounded down to closest multiple of 5*
-    if (WeatherChance <= 15) //15% chance to have the weather_rare
+    if (WeatherChance < 15) //15% chance to have the weather_rare
     {
         Weather = weatherType.rare;
     }
-    else if (WeatherChance <= 50) // 35% chance to have weather_common
+    else if (WeatherChance < 50) // 35% chance to have weather_common
     {
         Weather = weatherType.common;
     }
@@ -843,25 +843,16 @@ void CZone::CharZoneIn(CCharEntity* PChar)
     PChar->loc.zoning = false;
     PChar->loc.destination = 0;
     PChar->m_InsideRegionID = 0;
-    PChar->ResetLocalVars();
 
-    //remove temp items
-    charutils::ClearTempItems(PChar);
-
-    if (PChar->animation == ANIMATION_MOUNT && m_zoneType != ZONETYPE_DUNGEON) // Can summon mounts in outdoor area's chocobo can't go.
-    {
-        PChar->animation = ANIMATION_NONE;
-        PChar->StatusEffectContainer->DelStatusEffectSilent(EFFECT_MOUNTED);
-    }
-    else if (PChar->animation == ANIMATION_CHOCOBO && !CanUseMisc(MISC_CHOCOBO)) // Retail just prevents zoning instead.
+    if (PChar->isMounted() && !CanUseMisc(MISC_MOUNT))
     {
         PChar->animation = ANIMATION_NONE;
         PChar->StatusEffectContainer->DelStatusEffectSilent(EFFECT_MOUNTED);
     }
 
-    if (PChar->m_Costum != 0)
+    if (PChar->m_Costume != 0)
     {
-        PChar->m_Costum = 0;
+        PChar->m_Costume = 0;
         PChar->StatusEffectContainer->DelStatusEffect(EFFECT_COSTUME);
     }
 
@@ -947,6 +938,8 @@ void CZone::CharZoneOut(CCharEntity* PChar)
         PChar->PTreasurePool->DelMember(PChar);
     }
 
+    PChar->ClearTrusts(); // trusts don't survive zone lines
+
     if (PChar->isDead())
         charutils::SaveDeathTime(PChar);
 
@@ -969,13 +962,18 @@ void CZone::CharZoneOut(CCharEntity* PChar)
     if (PChar->PParty && PChar->loc.destination != 0 && PChar->m_moghouseID == 0)
     {
         uint8 data[4] {};
-        WBUFL(data, 0) = PChar->PParty->GetPartyID();
+        ref<uint32>(data, 0) = PChar->PParty->GetPartyID();
         message::send(MSG_PT_RELOAD, data, sizeof data, nullptr);
     }
 
     if (PChar->PParty)
     {
         PChar->PParty->PopMember(PChar);
+    }
+
+    if (PChar->PAutomaton)
+    {
+        PChar->PAutomaton->PMaster = nullptr;
     }
 }
 

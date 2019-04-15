@@ -1,17 +1,6 @@
 -----------------------------------
 -- Area: Waughroon Shrine
--- NPC: Titanis_Max
------------------------------------
-
------------------------------------
--- onMobSpawn Action
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- onMobDeath Action
+--  NPC: Titanis_Max
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)

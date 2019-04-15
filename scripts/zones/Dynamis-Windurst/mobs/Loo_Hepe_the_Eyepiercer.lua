@@ -1,26 +1,14 @@
 -----------------------------------
 -- Area: Dynamis Windurst
--- NPC:  Loo Hepe the Eyepiercer
+--  NPC: Loo Hepe the Eyepiercer
 -- Boss Trigger for MEGA BOSS
 -----------------------------------
 
------------------------------------
--- onMobSpawn Action
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- onMobDeath
------------------------------------
+mixins = {require("scripts/mixins/job_special")};
+require("scripts/globals/status");
 
 function onMobDeath(mob, player, isKiller)
 end;
-
------------------------------------
--- onMobDespawn
------------------------------------
 
 function onMobDespawn(mob)
 

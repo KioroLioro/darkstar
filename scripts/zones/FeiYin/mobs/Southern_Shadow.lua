@@ -1,29 +1,17 @@
 ----------------------------------
 -- Area: Fei'Yin
---  NM:  Southern Shadow
+--   NM: Southern Shadow
+-----------------------------------
+require("scripts/globals/mobs")
 -----------------------------------
 
------------------------------------
--- onMobDeath
------------------------------------
+function onMobInitialize(mob)
+    mob:setMobMod(dsp.mobMod.ADD_EFFECT, 1)
+end
+
+function onAdditionalEffect(mob, target, damage)
+    return dsp.mob.onAddEffect(mob, target, damage, dsp.mob.ae.EVA_DOWN)
+end
 
 function onMobDeath(mob, player, isKiller)
-end;
-
------------------------------------
--- onMobDespawn
------------------------------------
-
-function onMobDespawn(mob)
-
-    -- Set Southern Shadow's ToD
-    SetServerVariable("[POP]Southern_Shadow", os.time() + 57600); -- 16 hours
-    DisallowRespawn(mob:getID(), true);
-
-    -- Set PH back to normal, then set to respawn spawn
-    local PH = GetServerVariable("[PH]Southern_Shadow");
-    SetServerVariable("[PH]Southern_Shadow", 0);
-    DisallowRespawn(PH, false);
-    GetMobByID(PH):setRespawnTime(GetMobRespawnTime(PH));
-
-end;
+end

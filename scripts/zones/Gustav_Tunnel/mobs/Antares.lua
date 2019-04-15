@@ -3,37 +3,14 @@
 --  MOB: Antares
 -- Note: Place holder Amikiri
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-require("scripts/zones/Gustav_Tunnel/MobIDs");
-
------------------------------------
--- onMobDeath
------------------------------------
+local ID = require("scripts/zones/Gustav_Tunnel/IDs");
+require("scripts/globals/regimes")
+require("scripts/globals/mobs");
 
 function onMobDeath(mob, player, isKiller)
-
-    checkGoVregime(player,mob,768,2);
-
+    dsp.regime.checkRegime(player, mob, 768, 2, dsp.regime.type.GROUNDS)
 end;
 
------------------------------------
--- onMobDespawn
------------------------------------
-
 function onMobDespawn(mob)
-    local mobID = mob:getID();
-
-    if (Amikiri_PH[mobID] ~= nil) then
-        local ToD = GetServerVariable("[POP]Amikiri");
-        if (ToD <= os.time() and GetMobAction(Amikiri) == 0) then
-            if (math.random(1,20) == 5) then
-                UpdateNMSpawnPoint(Amikiri);
-                GetMobByID(Amikiri):setRespawnTime(GetMobRespawnTime(mobID));
-                SetServerVariable("[PH]Amikiri", mobID);
-                DisallowRespawn(mobID, true);
-            end
-        end
-    end
-
+    dsp.mob.phOnDespawn(mob,ID.mob.AMIKIRI_PH,5,math.random(25200,32400)); -- 7 to 9 hours
 end;

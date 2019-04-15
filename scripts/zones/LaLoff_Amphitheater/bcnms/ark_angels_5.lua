@@ -2,24 +2,20 @@
 -- Area: LaLoff Amphitheater
 -- Name: Ark Angels 5 (Galka)
 -----------------------------------
-package.loaded["scripts/zones/LaLoff_Amphitheater/TextIDs"] = nil;
------------------------------------
-
-require("scripts/zones/LaLoff_Amphitheater/TextIDs");
+local ID = require("scripts/zones/LaLoff_Amphitheater/IDs");
 require("scripts/globals/missions");
 require("scripts/globals/keyitems");
-
 -----------------------------------
 
 -- Death cutscenes:
 
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,0,0); -- Hume
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,1,0); -- taru
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,2,0); -- mithra
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,3,0); -- elvan
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,4,0); -- galka
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,5,0); -- divine might
--- player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,6,0); -- skip ending cs
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,0,0); -- Hume
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,1,0); -- taru
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,2,0); -- mithra
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,3,0); -- elvan
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,4,0); -- galka
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,5,0); -- divine might
+-- player:startEvent(32001,1,1,1,instance:getTimeInside(),1,6,0); -- skip ending cs
 
 
 -- After registering the BCNM via bcnmRegister(bcnmid)
@@ -39,47 +35,47 @@ end;
 -- from the core when a player disconnects or the time limit is up, etc
 
 function onBcnmLeave(player,instance,leavecode)
---print("leave code "..leavecode);
+    --print("leave code "..leavecode);
 
     if (leavecode == 2) then -- play end CS. Need time and battle id for record keeping + storage
         local record = instance:getRecord();
         local clearTime = record.clearTime;
     
         if (player:hasCompletedMission(ZILART,ARK_ANGELS)) then
-            player:startEvent(0x7d01,instance:getEntrance(),clearTime,1,instance:getTimeInside(),180,4,1);        -- winning CS (allow player to skip)
+            player:startEvent(32001,instance:getEntrance(),clearTime,1,instance:getTimeInside(),180,4,1);        -- winning CS (allow player to skip)
         else
-            player:startEvent(0x7d01,instance:getEntrance(),clearTime,1,instance:getTimeInside(),180,4,0);        -- winning CS (allow player to skip)
+            player:startEvent(32001,instance:getEntrance(),clearTime,1,instance:getTimeInside(),180,4,0);        -- winning CS (allow player to skip)
         end
         
     elseif (leavecode == 4) then
-        player:startEvent(0x7d02, 0, 0, 0, 0, 0, instance:getEntrance(), 180);    -- player lost
+        player:startEvent(32002, 0, 0, 0, 0, 0, instance:getEntrance(), 180);    -- player lost
     end
 end;
 
 function onEventUpdate(player,csid,option)
--- print("bc update csid "..csid.." and option "..option);
+    -- print("bc update csid "..csid.." and option "..option);
 
 end;
 
 function onEventFinish(player,csid,option)
- -- print("bc finish csid "..csid.." and option "..option);
+    -- print("bc finish csid "..csid.." and option "..option);
  
-   local AAKeyitems = (player:hasKeyItem(SHARD_OF_APATHY) and player:hasKeyItem(SHARD_OF_ARROGANCE)
-         and player:hasKeyItem(SHARD_OF_COWARDICE) and player:hasKeyItem(SHARD_OF_ENVY));
+    local AAKeyitems = (player:hasKeyItem(dsp.ki.SHARD_OF_APATHY) and player:hasKeyItem(dsp.ki.SHARD_OF_ARROGANCE)
+        and player:hasKeyItem(dsp.ki.SHARD_OF_COWARDICE) and player:hasKeyItem(dsp.ki.SHARD_OF_ENVY));
 
-   if (csid == 0x7d01) then
-      if (player:getCurrentMission(ZILART) == ARK_ANGELS  and player:getVar("ZilartStatus") == 1) then
-         player:addKeyItem(SHARD_OF_RAGE);
-         player:messageSpecial(KEYITEM_OBTAINED,SHARD_OF_RAGE);
-         if (AAKeyitems == true) then
-            player:completeMission(ZILART,ARK_ANGELS);
-            player:addMission(ZILART,THE_SEALED_SHRINE);
-            player:setVar("ZilartStatus",0);
-         end
-      end
-   end
+    if (csid == 32001) then
+        if (player:getCurrentMission(ZILART) == ARK_ANGELS  and player:getVar("ZilartStatus") == 1) then
+            player:addKeyItem(dsp.ki.SHARD_OF_RAGE);
+            player:messageSpecial(ID.text.KEYITEM_OBTAINED,dsp.ki.SHARD_OF_RAGE);
+            if (AAKeyitems == true) then
+                player:completeMission(ZILART,ARK_ANGELS);
+                player:addMission(ZILART,THE_SEALED_SHRINE);
+                player:setVar("ZilartStatus",0);
+            end
+        end
+    end
 
-   local AAKeyitems = (player:hasKeyItem(SHARD_OF_APATHY) and player:hasKeyItem(SHARD_OF_ARROGANCE)
-         and player:hasKeyItem(SHARD_OF_COWARDICE) and player:hasKeyItem(SHARD_OF_ENVY)
-         and player:hasKeyItem(SHARD_OF_RAGE));
+    local AAKeyitems = (player:hasKeyItem(dsp.ki.SHARD_OF_APATHY) and player:hasKeyItem(dsp.ki.SHARD_OF_ARROGANCE)
+        and player:hasKeyItem(dsp.ki.SHARD_OF_COWARDICE) and player:hasKeyItem(dsp.ki.SHARD_OF_ENVY)
+        and player:hasKeyItem(dsp.ki.SHARD_OF_RAGE));
 end;

@@ -3,16 +3,8 @@
 --   NM: Marquis_Amon
 -----------------------------------
 
------------------------------------
--- onMobDeath
------------------------------------
-
 function onMobDeath(mob, player, isKiller)
 end;
-
------------------------------------
--- onMobDespawn
------------------------------------
 
 function onMobDespawn(mob)
 
@@ -21,4 +13,3 @@ function onMobDespawn(mob)
     mob:setRespawnTime(math.random(75600,86400));
 
 end;
-

@@ -2,13 +2,9 @@
 -- Area: Quicksand Caves
 --  MOB: Sand Tarantula
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkGoVregime(player,mob,819,1);
+    dsp.regime.checkRegime(player, mob, 819, 1, dsp.regime.type.GROUNDS)
 end;

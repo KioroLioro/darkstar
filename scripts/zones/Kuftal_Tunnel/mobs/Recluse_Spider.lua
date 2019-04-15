@@ -3,37 +3,16 @@
 --  MOB: Recluse Spider
 -- Note: Place Holder for Arachne
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-require("scripts/zones/Kuftal_Tunnel/MobIDs");
-
------------------------------------
--- onMobDeath
+local ID = require("scripts/zones/Kuftal_Tunnel/IDs")
+require("scripts/globals/regimes")
+require("scripts/globals/mobs")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-
-    checkGoVregime(player,mob,737,2);
-    checkGoVregime(player,mob,739,2);
-
-end;
-
------------------------------------
--- onMobDespawn
------------------------------------
+    dsp.regime.checkRegime(player, mob, 737, 2, dsp.regime.type.GROUNDS)
+    dsp.regime.checkRegime(player, mob, 739, 2, dsp.regime.type.GROUNDS)
+end
 
 function onMobDespawn(mob)
-    local mobID = mob:getID();
-
-    if (Arachne_PH[mobID] ~= nil) then
-        local ToD = GetServerVariable("[POP]Arachne");
-        if (ToD <= os.time() and GetMobAction(Arachne) == 0) then
-            if (math.random(1,20) == 5) then
-                UpdateNMSpawnPoint(Arachne);
-                GetMobByID(Arachne):setRespawnTime(GetMobRespawnTime(mobID));
-                SetServerVariable("[PH]Arachne", mobID);
-                DisallowRespawn(mobID, true);
-            end
-        end
-    end
-end;
+    dsp.mob.phOnDespawn(mob, ID.mob.ARACHNE_PH, 5, math.random(7200, 28800)) -- 2 to 8 hours
+end

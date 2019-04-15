@@ -2,13 +2,9 @@
 -- Area: Western Altepa Desert
 --  MOB: Desert Beetle
 -----------------------------------
-
-require("scripts/globals/fieldsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkRegime(player,mob,136,1);
-end;
+    dsp.regime.checkRegime(player, mob, 136, 1, dsp.regime.type.FIELDS)
+end

@@ -23,6 +23,7 @@ This file is part of DarkStar-server source code.
 
 #include "lua_item.h"
 
+#include "../../common/showmsg.h"
 #include "../items/item.h"
 #include "../items/item_armor.h"
 #include "../items/item_weapon.h"
@@ -137,7 +138,7 @@ inline int32 CLuaItem::getName(lua_State* L)
 {
     DSP_DEBUG_BREAK_IF(m_PLuaItem == nullptr);
 
-    lua_pushstring(L, m_PLuaItem->getName());
+    lua_pushstring(L, (const char*)m_PLuaItem->getName());
     return 1;
 }
 
@@ -229,9 +230,60 @@ inline int32 CLuaItem::getWeaponskillPoints(lua_State* L)
 
     return 1;
 }
+
+inline int32 CLuaItem::isTwoHanded(lua_State* L)
+{
+    DSP_DEBUG_BREAK_IF(m_PLuaItem == nullptr);
+
+    if (CItemWeapon* PWeapon = dynamic_cast<CItemWeapon*>(m_PLuaItem))
+    {
+        lua_pushboolean(L, PWeapon->isTwoHanded());
+    }
+    else
+    {
+        ShowError(CL_RED"CLuaItem::isTwoHanded - not a valid Weapon.\n" CL_RESET);
+        lua_pushboolean(L, 0);
+    }
+
+    return 1;
+}
+
+inline int32 CLuaItem::isHandToHand(lua_State* L)
+{
+    DSP_DEBUG_BREAK_IF(m_PLuaItem == nullptr);
+
+    if (CItemWeapon* PWeapon = dynamic_cast<CItemWeapon*>(m_PLuaItem))
+    {
+        lua_pushboolean(L, PWeapon->isHandToHand());
+    }
+    else
+    {
+        ShowError(CL_RED"CLuaItem::isHandToHand - not a valid Weapon.\n" CL_RESET);
+        lua_pushboolean(L, 0);
+    }
+
+    return 1;
+}
+
+inline int32 CLuaItem::isShield(lua_State* L)
+{
+    DSP_DEBUG_BREAK_IF(m_PLuaItem == nullptr);
+
+    if (CItemArmor* PArmor = dynamic_cast<CItemArmor*>(m_PLuaItem))
+    {
+        lua_pushboolean(L, PArmor->IsShield());
+    }
+    else
+    {
+        ShowError(CL_RED"CLuaItem::isShield - not a valid Armor.\n" CL_RESET);
+        lua_pushboolean(L, 0);
+    }
+
+    return 1;
+}
 //==========================================================//
 
-const int8 CLuaItem::className[] = "CItem";
+const char CLuaItem::className[] = "CItem";
 
 Lunar<CLuaItem>::Register_t CLuaItem::methods[] =
 {
@@ -252,5 +304,8 @@ Lunar<CLuaItem>::Register_t CLuaItem::methods[] =
     LUNAR_DECLARE_METHOD(CLuaItem,getAugment),
     LUNAR_DECLARE_METHOD(CLuaItem,getSkillType),
     LUNAR_DECLARE_METHOD(CLuaItem,getWeaponskillPoints),
+    LUNAR_DECLARE_METHOD(CLuaItem,isTwoHanded),
+    LUNAR_DECLARE_METHOD(CLuaItem,isHandToHand),
+    LUNAR_DECLARE_METHOD(CLuaItem,isShield),
     {nullptr,nullptr}
 };

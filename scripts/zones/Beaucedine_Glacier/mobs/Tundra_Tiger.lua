@@ -1,51 +1,18 @@
 -----------------------------------
--- Area: Beaucedine Glacier
+-- Area: Beaucedine Glacier (111)
 --  MOB: Tundra Tiger
 -- Note: PH for Nue, Kirata
 -----------------------------------
-
-require("scripts/globals/fieldsofvalor");
-require("scripts/zones/Beaucedine_Glacier/MobIDs");
-
------------------------------------
--- onMobDeath
------------------------------------
+local ID = require("scripts/zones/Beaucedine_Glacier/IDs");
+require("scripts/globals/regimes")
+require("scripts/globals/mobs");
 
 function onMobDeath(mob, player, isKiller)
-    checkRegime(player,mob,46,1);
-    checkRegime(player,mob,47,1);
+    dsp.regime.checkRegime(player, mob, 46, 1, dsp.regime.type.FIELDS)
+    dsp.regime.checkRegime(player, mob, 47, 1, dsp.regime.type.FIELDS)
 end;
 
------------------------------------
--- onMobDespawn
------------------------------------
-
 function onMobDespawn(mob)
-    local mobID = mob:getID();
-
-    -- Kirata
-    if (Kirata_PH[mobID] ~= nil) then
-        local ToD = GetServerVariable("[POP]Kirata");
-        if (ToD <= os.time() and GetMobAction(Kirata) == 0) then
-            if (math.random(1,15) == 5) then
-                UpdateNMSpawnPoint(Kirata);
-                GetMobByID(Kirata):setRespawnTime(GetMobRespawnTime(mobID));
-                SetServerVariable("[PH]Kirata", mobID);
-                DisallowRespawn(mobID, true);
-            end
-        end
-    end
-
-    -- Nue
-    if (Nue_PH[mobID] ~= nil) then
-        local ToD = GetServerVariable("[POP]Nue");
-        if (ToD <= os.time() and GetMobAction(Nue) == 0) then
-            if (math.random(1,15) == 5) then
-                UpdateNMSpawnPoint(Nue);
-                GetMobByID(Nue):setRespawnTime(GetMobRespawnTime(mobID));
-                SetServerVariable("[PH]Nue", mobID);
-                DisallowRespawn(mobID, true);
-            end
-        end
-    end
+    dsp.mob.phOnDespawn(mob,ID.mob.KIRATA_PH,7,math.random(3600,28800)); -- 1 to 8 hours
+    dsp.mob.phOnDespawn(mob,ID.mob.NUE_PH,7,math.random(3600,7200)); -- 1 to 2 hours
 end;

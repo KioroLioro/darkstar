@@ -2,13 +2,9 @@
 -- Area: Outer Horutoto
 --  MOB: Fetor Bats
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkGoVregime(player,mob,669,1);
-end;
+    dsp.regime.checkRegime(player, mob, 669, 1, dsp.regime.type.GROUNDS)
+end

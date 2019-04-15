@@ -53,6 +53,7 @@
 #include "../weapon_skill.h"
 #include "../vana_time.h"
 #include "../utils/zoneutils.h"
+#include "../timetriggers.h"
 #include "../transport.h"
 #include "../packets/action.h"
 #include "../packets/char_update.h"
@@ -83,8 +84,8 @@
 
 namespace luautils
 {
-#define lua_prepscript(n,...) int8 File[255]; int32 oldtop = lua_gettop(LuaHandle); \
-                              snprintf( File, sizeof(File), n, ##__VA_ARGS__);
+#define lua_prepscript(n,...) int8 File[255]; \
+                              snprintf((char*)File, sizeof(File), n, ##__VA_ARGS__);
     lua_State*  LuaHandle = nullptr;
 
     bool contentRestrictionEnabled;
@@ -140,7 +141,6 @@ namespace luautils
         lua_register(LuaHandle, "clearVarFromAll", luautils::clearVarFromAll);
         lua_register(LuaHandle, "SendEntityVisualPacket", luautils::SendEntityVisualPacket);
         lua_register(LuaHandle, "UpdateServerMessage", luautils::UpdateServerMessage);
-        lua_register(LuaHandle, "UpdateTreasureSpawnPoint", luautils::UpdateTreasureSpawnPoint);
         lua_register(LuaHandle, "GetMobRespawnTime", luautils::GetMobRespawnTime);
         lua_register(LuaHandle, "DisallowRespawn", luautils::DisallowRespawn);
         lua_register(LuaHandle, "UpdateNMSpawnPoint", luautils::UpdateNMSpawnPoint);
@@ -242,7 +242,7 @@ namespace luautils
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, function);
 
-        auto ret = luaL_loadfile(LuaHandle, File);
+        auto ret = luaL_loadfile(LuaHandle, (const char*)File);
         if (ret)
         {
             if (ret != LUA_ERRFILE)
@@ -285,11 +285,7 @@ namespace luautils
 
     int32 SendEntityVisualPacket(lua_State* L)
     {
-        if ((!lua_isnil(L, 1) && lua_isnumber(L, 1)) &&
-            (!lua_isnil(L, 2) && lua_isnumber(L, 2)) &&
-            (!lua_isnil(L, 3) && lua_isnumber(L, 3)) &&
-            (!lua_isnil(L, 4) && lua_isnumber(L, 4)) &&
-            (!lua_isnil(L, 5) && lua_isnumber(L, 5)))
+        if (!lua_isnil(L, 1) && lua_isnumber(L, 1))
         {
             uint32 npcid = (uint32)lua_tointeger(L, 1);
             const char* command = lua_tostring(L, 2);
@@ -551,9 +547,8 @@ namespace luautils
 
     int32 SetRegionalConquestOverseers(uint8 regionID)
     {
-        int8 File[255];
+        char File[255];
         memset(File, 0, sizeof(File));
-        int32 oldtop = lua_gettop(LuaHandle);
 
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "SetRegionalConquestOverseers");
@@ -567,28 +562,43 @@ namespace luautils
             return -1;
         }
 
-        lua_getglobal(LuaHandle, "SetRegionalConquestOverseers");
+        lua_getglobal(LuaHandle, "dsp");
         if (lua_isnil(LuaHandle, -1))
         {
             lua_pop(LuaHandle, 1);
-            ShowError("luautils::SetRegionalConquestOverseers: undefined procedure SetRegionalConquestOverseers\n");
+            ShowError("luautils::SetRegionalConquestOverseers: undefined global dsp\n");
+            return -1;
+        }
+
+        lua_getfield(LuaHandle,-1,"conquest");
+        if (lua_isnil(LuaHandle, -1))
+        {
+            lua_pop(LuaHandle, 2);
+            ShowError("luautils::SetRegionalConquestOverseers: undefined field dsp.conquest\n");
+            return -1;
+        }
+
+        lua_getfield(LuaHandle,-1,"setRegionalConquestOverseers");
+        if (lua_isnil(LuaHandle, -1))
+        {
+            lua_pop(LuaHandle, 3);
+            ShowError("luautils::SetRegionalConquestOverseers: undefined procedure dsp.conquest.setRegionalConquestOverseers\n");
             return -1;
         }
 
         lua_pushinteger(LuaHandle, regionID);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::SetRegionalConquestOverseers: %s\n", lua_tostring(LuaHandle, -1));
-            lua_pop(LuaHandle, 1);
+            lua_pop(LuaHandle, 3);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
+        else
         {
-            ShowError("luautils::SetRegionalConquestOverseers (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
+            lua_pop(LuaHandle, 2);
         }
+
         return 0;
     }
 
@@ -879,7 +889,7 @@ namespace luautils
 
                 if (!lua_isnil(L, 2) && lua_isnumber(L, 2))
                 {
-                    PMob->SetDespawnTime(std::chrono::milliseconds(lua_tointeger(L, 2)));
+                    PMob->SetDespawnTime(std::chrono::seconds(lua_tointeger(L, 2)));
                 }
 
                 if (!lua_isnil(L, 3) && lua_isnumber(L, 3))
@@ -942,7 +952,7 @@ namespace luautils
             {
                 if (!lua_isnil(L, 2) && lua_isnumber(L, 2))
                 {
-                    PMob->SetDespawnTime(std::chrono::milliseconds(lua_tointeger(L, 2)));
+                    PMob->SetDespawnTime(std::chrono::seconds(lua_tointeger(L, 2)));
                 }
                 else
                 {
@@ -1142,29 +1152,41 @@ namespace luautils
 
     int32 GetTextIDVariable(uint16 ZoneID, const char* variable)
     {
-        lua_pushnil(LuaHandle);
-        lua_setglobal(LuaHandle, variable);
+        lua_getglobal(LuaHandle, "zones");
 
-        int8 File[255];
-        memset(File, 0, sizeof(File));
-        snprintf(File, sizeof(File), "scripts/zones/%s/TextIDs.lua", zoneutils::GetZone(ZoneID)->GetName());
-
-        if (luaL_loadfile(LuaHandle, File) || lua_pcall(LuaHandle, 0, 0, 0))
+        if (lua_isnil(LuaHandle, -1) || !lua_istable(LuaHandle, -1))
         {
             lua_pop(LuaHandle, 1);
             return 0;
         }
 
-        lua_getglobal(LuaHandle, variable);
+        lua_pushnumber(LuaHandle, ZoneID);
+        lua_gettable(LuaHandle, -2);
+
+        if (lua_isnil(LuaHandle, -1) || !lua_istable(LuaHandle, -1))
+        {
+            lua_pop(LuaHandle, 2);
+            return 0;
+        }
+
+        lua_getfield(LuaHandle, -1, "text");
+
+        if (lua_isnil(LuaHandle, -1) || !lua_istable(LuaHandle, -1))
+        {
+            lua_pop(LuaHandle, 3);
+            return 0;
+        }
+
+        lua_getfield(LuaHandle, -1, variable);
 
         if (lua_isnil(LuaHandle, -1) || !lua_isnumber(LuaHandle, -1))
         {
-            lua_pop(LuaHandle, 1);
+            lua_pop(LuaHandle, 4);
             return 0;
         }
 
         int32 value = (int32)lua_tonumber(LuaHandle, -1);
-        lua_pop(LuaHandle, -1);
+        lua_pop(LuaHandle, 4);
         return value;
     }
 
@@ -1179,7 +1201,7 @@ namespace luautils
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, variable);
 
-        int8 File[255];
+        char File[255];
         memset(File, 0, sizeof(File));
         snprintf(File, sizeof(File), "scripts/globals/settings.lua");
 
@@ -1219,18 +1241,18 @@ namespace luautils
 
             bool contentEnabled;
 
-            try
+            if (auto contentEnabledIter = contentEnabledMap.find(contentVariable);  contentEnabledIter != contentEnabledMap.end())
             {
-                contentEnabled = contentEnabledMap.at(contentVariable);
+                contentEnabled = contentEnabledIter->second;
             }
-            catch (std::out_of_range)
+            else
             {
                 // Cache contentTag lookups in a map so that we don't re-hit the Lua file every time
                 contentEnabled = (GetSettingsVariable(contentVariable.c_str()) != 0);
                 contentEnabledMap[contentVariable] = contentEnabled;
             }
 
-            if (contentEnabled == false && contentRestrictionEnabled == true)
+            if (!contentEnabled && contentRestrictionEnabled)
             {
                 return false;
             }
@@ -1261,18 +1283,13 @@ namespace luautils
         CLuaZone LuaZone(PZone);
         Lunar<CLuaZone>::push(LuaHandle, &LuaZone);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onInitialize: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::oInitialize (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1297,18 +1314,13 @@ namespace luautils
         lua_pushboolean(LuaHandle, PChar->GetPlayTime(false) == 0); // first login
         lua_pushboolean(LuaHandle, zoning);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 0, 0))
         {
             ShowError("luautils::onGameIn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onGameIn (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1321,7 +1333,7 @@ namespace luautils
 
     int32 OnZoneIn(CCharEntity* PChar)
     {
-        lua_prepscript("scripts/zones/%s/Zone.lua", PChar->m_moghouseID ? "Residential_Area" : zoneutils::GetZone(PChar->loc.destination)->GetName());
+        lua_prepscript("scripts/zones/%s/Zone.lua", PChar->m_moghouseID ? "Residential_Area" : (const char*)zoneutils::GetZone(PChar->loc.destination)->GetName());
 
         if (prepFile(File, "onZoneIn"))
         {
@@ -1333,25 +1345,15 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, PChar->loc.prevzone);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 1, 0))
         {
             ShowError("luautils::onZoneIn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onZoneIn (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onZoneIn (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -1367,18 +1369,13 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PChar);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::afterZoneIn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::afterZoneIn (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return;
     }
 
@@ -1393,17 +1390,17 @@ namespace luautils
         std::string filename;
         if (PChar->PInstance)
         {
-            filename = std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/instances/" + PChar->PInstance->GetName() + ".lua";
+            filename = std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/instances/" + (const char*)PChar->PInstance->GetName() + ".lua";
         }
         else
         {
-            filename = std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/Zone.lua";
+            filename = std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/Zone.lua";
         }
 
         //player may be entering because of an earlier event (event that changes position)
         // these should probably not call another event from onRegionEnter (use onEventFinish instead)
         if (PChar->m_event.EventID == -1)
-            PChar->m_event.Script.insert(0, filename.c_str());
+            PChar->m_event.Script = filename;
 
         if (prepFile((int8*)filename.c_str(), "onRegionEnter"))
         {
@@ -1435,16 +1432,16 @@ namespace luautils
         std::string filename;
         if (PChar->PInstance)
         {
-            filename = std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/instances/" + PChar->PInstance->GetName() + ".lua";
+            filename = std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/instances/" + (const char*)PChar->PInstance->GetName() + ".lua";
         }
         else
         {
-            filename = std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/Zone.lua";
+            filename = std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/Zone.lua";
         }
 
         //player may be leaving because of an earlier event (event that changes position)
         if (PChar->m_event.EventID == -1)
-            PChar->m_event.Script.insert(0, filename.c_str());
+            PChar->m_event.Script = filename;
 
         if (prepFile((int8*)filename.c_str(), "onRegionLeave"))
         {
@@ -1478,13 +1475,13 @@ namespace luautils
 
         PChar->m_event.reset();
         PChar->m_event.Target = PNpc;
-        PChar->m_event.Script.insert(0, File);
+        PChar->m_event.Script.insert(0, (const char*)File);
         PChar->StatusEffectContainer->DelStatusEffect(EFFECT_BOOST);
 
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onTrigger");
 
-        auto ret = luaL_loadfile(LuaHandle, File);
+        auto ret = luaL_loadfile(LuaHandle, (const char*)File);
         if (ret)
         {
             ShowWarning("luautils::%s: %s\n", "onTrigger", lua_tostring(LuaHandle, -1));
@@ -1513,36 +1510,16 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntityTarg(PNpc);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntityTarg);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 1, 0))
         {
             ShowError("luautils::onTrigger: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
 
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-
-        if (returns > 1)
-        {
-            uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
-            lua_pop(LuaHandle, 1);
-            if (returns > 1)
-            {
-                ShowError("luautils::onTrigger (%s): 1 or 0 returns expected, got %d\n", File, returns);
-                lua_pop(LuaHandle, returns - 1);
-            }
-            return retVal;
-        }
-        else if (returns == 1)
-        {
-            uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
-            lua_pop(LuaHandle, 1);
-            return retVal;
-        }
-        else
-        {
-            return 0;
-        }
+        uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
+        lua_pop(LuaHandle, 1);
+        return retVal;
     }
 
     /************************************************************************
@@ -1553,8 +1530,6 @@ namespace luautils
 
     int32 OnEventUpdate(CCharEntity* PChar, uint16 eventID, uint32 result)
     {
-        int32 oldtop = lua_gettop(LuaHandle);
-
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onEventUpdate");
 
@@ -1586,8 +1561,6 @@ namespace luautils
 
     int32 OnEventUpdate(CCharEntity* PChar, int8* string)
     {
-        int32 oldtop = lua_gettop(LuaHandle);
-
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onEventUpdate");
 
@@ -1603,7 +1576,7 @@ namespace luautils
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
         lua_pushinteger(LuaHandle, PChar->m_event.EventID);
-        lua_pushstring(LuaHandle, string);
+        lua_pushstring(LuaHandle, (const char*)string);
 
         CLuaBaseEntity LuaTargetEntity(PChar->m_event.Target);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaTargetEntity);
@@ -1625,8 +1598,6 @@ namespace luautils
 
     int32 OnEventFinish(CCharEntity* PChar, uint16 eventID, uint32 result)
     {
-        int32 oldtop = lua_gettop(LuaHandle);
-
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onEventFinish");
 
@@ -1653,7 +1624,6 @@ namespace luautils
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
         if (PChar->m_event.Script.find("/bcnms/") > 0 && PChar->health.hp <= 0) { //for some reason the event doesnt enforce death afterwards
             PChar->animation = ANIMATION_DEATH;
             PChar->pushPacket(new CRaiseTractorMenuPacket(PChar, TYPE_HOMEPOINT));
@@ -1674,7 +1644,7 @@ namespace luautils
 
         PChar->m_event.reset();
         PChar->m_event.Target = PNpc;
-        PChar->m_event.Script.insert(0, File);
+        PChar->m_event.Script.insert(0, (const char*)File);
 
         if (prepFile(File, "onTrade"))
         {
@@ -1690,18 +1660,13 @@ namespace luautils
         CLuaTradeContainer LuaTradeContainer(PChar->TradeContainer);
         Lunar<CLuaTradeContainer>::push(LuaHandle, &LuaTradeContainer);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 0, 0))
         {
             ShowError("luautils::onTrade: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onTrade (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1719,18 +1684,13 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PNpc);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onNpcSpawn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onNpcSpawn (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1784,34 +1744,17 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, damage);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 3, 0))
         {
             ShowError("luautils::onSpikesDamage: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
 
-        if (returns > 3)
-        {
-            Action->spikesEffect = (SUBEFFECT)(!lua_isnil(LuaHandle, -3) && lua_isnumber(LuaHandle, -3) ? (int32)lua_tonumber(LuaHandle, -3) : 0);
-            Action->spikesMessage = (!lua_isnil(LuaHandle, -2) && lua_isnumber(LuaHandle, -2) ? (int32)lua_tonumber(LuaHandle, -2) : 0);
-            Action->spikesParam = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
-            ShowError("luautils::onSpikesDamage (%s): 3 returns expected, got %d\n", File, lua_gettop(LuaHandle));
-            lua_pop(LuaHandle, returns);
-        }
-        else if (returns == 3)
-        {
-            Action->spikesEffect = (SUBEFFECT)(!lua_isnil(LuaHandle, -3) && lua_isnumber(LuaHandle, -3) ? (int32)lua_tonumber(LuaHandle, -3) : 0);
-            Action->spikesMessage = (!lua_isnil(LuaHandle, -2) && lua_isnumber(LuaHandle, -2) ? (int32)lua_tonumber(LuaHandle, -2) : 0);
-            Action->spikesParam = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
-            lua_pop(LuaHandle, 3);
-        }
-        else if (returns < 2)
-        {
-            ShowError("luautils::onSpikesDamage (%s): 3 returns expected, got %d\n", File, lua_gettop(LuaHandle));
-            lua_pop(LuaHandle, returns);
-        }
+        Action->spikesEffect = (SUBEFFECT)(!lua_isnil(LuaHandle, -3) && lua_isnumber(LuaHandle, -3) ? (int32)lua_tonumber(LuaHandle, -3) : 0);
+        Action->spikesMessage = (!lua_isnil(LuaHandle, -2) && lua_isnumber(LuaHandle, -2) ? (int32)lua_tonumber(LuaHandle, -2) : 0);
+        Action->spikesParam = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
+        lua_pop(LuaHandle, 3);
 
         return 0;
     }
@@ -1838,18 +1781,13 @@ namespace luautils
         CLuaStatusEffect LuaStatusEffect(PStatusEffect);
         Lunar<CLuaStatusEffect>::push(LuaHandle, &LuaStatusEffect);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onEffectGain: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onEffectGain (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1874,18 +1812,13 @@ namespace luautils
         CLuaStatusEffect LuaStatusEffect(PStatusEffect);
         Lunar<CLuaStatusEffect>::push(LuaHandle, &LuaStatusEffect);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onEffectTick: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onEffectTick (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1911,18 +1844,13 @@ namespace luautils
         CLuaStatusEffect LuaStatusEffect(PStatusEffect);
         Lunar<CLuaStatusEffect>::push(LuaHandle, &LuaStatusEffect);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onEffectLose: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onEffectLose (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -1983,18 +1911,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, maneuvers);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onManeuverGain: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onManeuverGain (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2012,18 +1935,37 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, maneuvers);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onManeuverLose: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
+
+        return 0;
+    }
+
+    int32 OnUpdateAttachment(CBattleEntity* PEntity, CItemPuppet* attachment, uint8 maneuvers)
+    {
+        lua_prepscript("scripts/globals/abilities/pets/attachments/%s.lua", attachment->getName());
+
+        if (prepFile(File, "onUpdate"))
         {
-            ShowError("luautils::onManeuverLose (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
+            return -1;
         }
+
+        CLuaBaseEntity LuaBaseEntity(PEntity);
+        Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
+
+        lua_pushinteger(LuaHandle, maneuvers);
+
+        if (lua_pcall(LuaHandle, 2, 0, 0))
+        {
+            ShowError("luautils::onUpdate: %s\n", lua_tostring(LuaHandle, -1));
+            lua_pop(LuaHandle, 1);
+            return -1;
+        }
+
         return 0;
     }
 
@@ -2034,30 +1976,36 @@ namespace luautils
     *                                                                       *
     ************************************************************************/
 
-    int32 OnItemCheck(CBaseEntity* PTarget, CItem* PItem, uint32 param)
+    std::tuple<int32, int32, int32> OnItemCheck(CBaseEntity* PTarget, CItem* PItem, ITEMCHECK param, CBaseEntity* PCaster)
     {
         lua_prepscript("scripts/globals/items/%s.lua", PItem->getName());
 
         if (prepFile(File, "onItemCheck"))
         {
-            return 56;
+            return { 56, 0, 0 };
         }
 
-        CLuaBaseEntity LuaBaseEntity(PTarget);
-        Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
+        CLuaBaseEntity LuaBaseEntityTarget(PTarget);
+        Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntityTarget);
+        CLuaBaseEntity LuaBaseEntityCaster(PCaster);
 
-        lua_pushinteger(LuaHandle, param);
+        lua_pushinteger(LuaHandle, static_cast<uint32>(param));
 
-        if (lua_pcall(LuaHandle, 2, 1, 0))
+        Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntityCaster);
+
+        if (lua_pcall(LuaHandle, 3, 3, 0))
         {
             ShowError("luautils::onItemCheck: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
-            return 56;
+            return { 56, 0, 0 };
         }
 
-        uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
-        lua_pop(LuaHandle, 1);
-        return retVal;
+        uint32 messageId = (!lua_isnil(LuaHandle, -3) && lua_isnumber(LuaHandle, -3) ? (int32)lua_tonumber(LuaHandle, -3) : 0);
+        uint32 param1 = (!lua_isnil(LuaHandle, -2) && lua_isnumber(LuaHandle, -2) ? (int32)lua_tonumber(LuaHandle, -2) : 0);
+        uint32 param2 = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
+        lua_pop(LuaHandle, 3);
+
+        return { messageId, param1, param2 };
     }
 
     /************************************************************************
@@ -2080,18 +2028,13 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PTarget);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onItemUse: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onItemUse (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2116,18 +2059,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, 0);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::CheckForGearSet: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 56;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::CheckForGearSet (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2142,8 +2080,11 @@ namespace luautils
     {
         DSP_DEBUG_BREAK_IF(PSpell == nullptr);
 
-        lua_prepscript(PSpell->getSpellGroup() == SPELLGROUP_BLUE ? "scripts/globals/spells/bluemagic/%s.lua" : "scripts/globals/spells/%s.lua",
-            PSpell->getName());
+        lua_prepscript(
+            PSpell->getSpellGroup() == SPELLGROUP_BLUE ? "scripts/globals/spells/bluemagic/%s.lua" :
+            PSpell->getSpellGroup() == SPELLGROUP_TRUST ? "scripts/globals/spells/trust/%s.lua" :
+            "scripts/globals/spells/%s.lua", PSpell->getName()
+        );
 
         if (prepFile(File, "onSpellCast"))
         {
@@ -2159,25 +2100,15 @@ namespace luautils
         CLuaSpell LuaSpell(PSpell);
         Lunar<CLuaSpell>::push(LuaHandle, &LuaSpell);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onSpellCast: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onSpellCast (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onSpellCast (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -2204,17 +2135,11 @@ namespace luautils
             CLuaSpell LuaSpell(PSpell);
             Lunar<CLuaSpell>::push(LuaHandle, &LuaSpell);
 
-            if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+            if (lua_pcall(LuaHandle, 2, 0, 0))
             {
                 ShowError("luautils::onSpellPrecast: %s\n", lua_tostring(LuaHandle, -1));
                 lua_pop(LuaHandle, 1);
                 return 0;
-            }
-            int32 returns = lua_gettop(LuaHandle) - oldtop;
-            if (returns > 0)
-            {
-                ShowError("luautils::onMobInitialize (%s): 0 returns expected, got %d\n", File, returns);
-                lua_pop(LuaHandle, returns);
             }
         }
         return 0;
@@ -2264,6 +2189,8 @@ namespace luautils
     {
         DSP_DEBUG_BREAK_IF(PSpell == nullptr);
 
+        PTarget->PAI->EventHandler.triggerListener("MAGIC_TAKE", PCaster, PTarget, PSpell);
+
         lua_prepscript("scripts/zones/%s/mobs/%s.lua", PTarget->loc.zone->GetName(), PTarget->GetName());
 
         if (prepFile(File, "onMagicHit"))
@@ -2280,27 +2207,15 @@ namespace luautils
         CLuaSpell LuaSpell(PSpell);
         Lunar<CLuaSpell>::push(LuaHandle, &LuaSpell);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onMagicHit: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
 
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onMagicHit (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
-
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onMagicHit (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -2331,27 +2246,15 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, PWeaponskill);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onWeaponskillHit: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
 
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onWeaponskillHit (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
-
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onWeaponskillHit (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -2375,18 +2278,13 @@ namespace luautils
         CLuaBaseEntity LuaMobEntity(PMob);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaMobEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onMobInitialize: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onMobInitialize (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2402,7 +2300,7 @@ namespace luautils
 
         //remove any previous definition of the global "mixins"
 
-        auto ret = luaL_loadfile(LuaHandle, File);
+        auto ret = luaL_loadfile(LuaHandle, (const char*)File);
         if (ret)
         {
             lua_pop(LuaHandle, 1);
@@ -2432,7 +2330,7 @@ namespace luautils
         lua_getglobal(LuaHandle, "mixins");
         if (lua_isnil(LuaHandle, -1))
         {
-            lua_pop(LuaHandle, 1);
+            lua_pop(LuaHandle, 3);
             return -1;
         }
         //get the parameter "mixinOptions" (optional)
@@ -2486,14 +2384,14 @@ namespace luautils
         CLuaBaseEntity LuaKillerEntity(PTarget);
 
         int8 File[255];
-        PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+        PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
-        if (PTarget->objtype != TYPE_PET && PTarget->objtype != TYPE_MOB)
+        if (PTarget->objtype == TYPE_PC)
         {
             ((CCharEntity*)PTarget)->m_event.reset();
             ((CCharEntity*)PTarget)->m_event.Target = PMob;
-            ((CCharEntity*)PTarget)->m_event.Script.insert(0, File);
+            ((CCharEntity*)PTarget)->m_event.Script.insert(0, (const char*)File);
         }
 
         if (prepFile(File, "onMobEngaged"))
@@ -2526,8 +2424,8 @@ namespace luautils
         uint8 weather = PMob->loc.zone->GetWeather();
 
         int8 File[255];
-        PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+        PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
         if (prepFile(File, "onMobDisengage"))
         {
@@ -2561,7 +2459,7 @@ namespace luautils
         {
             ((CCharEntity*)PTarget)->m_event.reset();
             ((CCharEntity*)PTarget)->m_event.Target = PMob;
-            ((CCharEntity*)PTarget)->m_event.Script.insert(0, File);
+            ((CCharEntity*)PTarget)->m_event.Script.insert(0, (const char*)File);
         }
 
         if (prepFile(File, "onMobDrawIn"))
@@ -2572,18 +2470,13 @@ namespace luautils
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaMobEntity);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaKillerEntity);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onMobDrawIn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onMobDrawIn (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2602,8 +2495,8 @@ namespace luautils
         CLuaBaseEntity LuaKillerEntity(PTarget);
 
         int8 File[255];
-        PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+        PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
         if (prepFile(File, "onMobFight"))
         {
@@ -2628,6 +2521,7 @@ namespace luautils
 
             CLuaBaseEntity LuaMobEntity(PMob);
 
+        PMob->PAI->EventHandler.triggerListener("CRITICAL_TAKE", PMob);
         lua_prepscript("scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
         if (prepFile(File, "onCriticalHit"))
@@ -2637,18 +2531,13 @@ namespace luautils
 
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaMobEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onCriticalHit: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onCriticalHit (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2706,9 +2595,9 @@ namespace luautils
             lua_pushnil(LuaHandle);
             lua_setglobal(LuaHandle, "onMobDeath");
 
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
-            PChar->ForAlliance([PMob, PChar, &File, oldtop](CBattleEntity* PPartyMember)
+            PChar->ForAlliance([PMob, PChar, &File](CBattleEntity* PPartyMember)
             {
                 CCharEntity* PMember = (CCharEntity*)PPartyMember;
                 if (PMember->getZone() == PChar->getZone())
@@ -2719,9 +2608,9 @@ namespace luautils
 
                     PMember->m_event.reset();
                     PMember->m_event.Target = PMob;
-                    PMember->m_event.Script.insert(0, File);
+                    PMember->m_event.Script.insert(0, (const char*)File);
 
-                    if (luaL_loadfile(LuaHandle, File) || lua_pcall(LuaHandle, 0, 0, 0))
+                    if (luaL_loadfile(LuaHandle, (const char*)File) || lua_pcall(LuaHandle, 0, 0, 0))
                     {
                         lua_pop(LuaHandle, 1);
                         return;
@@ -2747,18 +2636,11 @@ namespace luautils
                         lua_pushnil(LuaHandle);
                     }
 
-                    if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+                    if (lua_pcall(LuaHandle, 3, 0, 0))
                     {
                         ShowError("luautils::onMobDeath: %s\n", lua_tostring(LuaHandle, -1));
                         lua_pop(LuaHandle, 1);
                         return;
-                    }
-
-                    int32 returns = lua_gettop(LuaHandle) - oldtop;
-                    if (returns > 0)
-                    {
-                        ShowError("luautils::onMobDeath (%s): 0 returns expected, got %d\n", File, returns);
-                        lua_pop(LuaHandle, returns);
                     }
                 }
             });
@@ -2767,15 +2649,15 @@ namespace luautils
         {
             int8 File[255];
             memset(File, 0, sizeof(File));
-            PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-                snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());;
+            PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+                snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());;
 
             lua_pushnil(LuaHandle);
             lua_setglobal(LuaHandle, "onMobDeath");
 
             CLuaBaseEntity LuaMobEntity(PMob);
 
-            if (luaL_loadfile(LuaHandle, File) || lua_pcall(LuaHandle, 0, 0, 0))
+            if (luaL_loadfile(LuaHandle, (const char*)File) || lua_pcall(LuaHandle, 0, 0, 0))
             {
                 lua_pop(LuaHandle, 1);
                 return -1;
@@ -2815,8 +2697,8 @@ namespace luautils
         DSP_DEBUG_BREAK_IF(PMob == nullptr);
 
         int8 File[255];
-        PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+        PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
         if (prepFile(File, "onMobSpawn"))
         {
             return -1;
@@ -2850,18 +2732,14 @@ namespace luautils
 
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaMobEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onMobRoamAction: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onMobRoamAction (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }   return 0;
+
+        return 0;
     }
 
     /************************************************************************
@@ -2885,17 +2763,11 @@ namespace luautils
 
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaMobEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onMobRoam: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
-        }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onMobRoam (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
         }
 
         return 0;
@@ -2912,8 +2784,8 @@ namespace luautils
         DSP_DEBUG_BREAK_IF(PMob == nullptr);
 
         int8 File[255];
-        PMob->objtype == TYPE_PET ? snprintf(File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
-            snprintf(File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
+        PMob->objtype == TYPE_PET ? snprintf((char*)File, sizeof(File), "scripts/globals/pets/%s.lua", static_cast<CPetEntity*>(PMob)->GetScriptName().c_str()) :
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/mobs/%s.lua", PMob->loc.zone->GetName(), PMob->GetName());
 
         if (prepFile(File, "onMobDespawn"))
         {
@@ -2947,18 +2819,13 @@ namespace luautils
             return -1;
         }
 
-        if (lua_pcall(LuaHandle, 0, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 0, 0, 0))
         {
             ShowError("luautils::onGameDay: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onGameDay (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -2979,18 +2846,13 @@ namespace luautils
         CLuaZone LuaZone(PZone);
         Lunar<CLuaZone>::push(LuaHandle, &LuaZone);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onGameHour: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onGameHour (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3005,17 +2867,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, weather);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
+            ShowError("luautils::OnZoneWeatherChange: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onZoneWeatherChange (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3030,17 +2888,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, TOTD);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
+            ShowError("luautils::OnTOTDChange: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onTOTDChange (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3083,19 +2937,13 @@ namespace luautils
         }
 
 
-        if (lua_pcall(LuaHandle, 7, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 7, 4, 0))
         {
             ShowError("luautils::onUseWeaponSkill: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return std::tuple<int32, uint8, uint8>();
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 4)
-        {
-            ShowError("luautils::onUseWeaponSkill (%s): 4 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-            return std::tuple<int32, uint8, uint8>();
-        }
+
         uint8 tpHitsLanded = (uint8)lua_tonumber(LuaHandle, -4);
         uint8 extraHitsLanded = (uint8)lua_tonumber(LuaHandle, -3);
         bool criticalHit = lua_toboolean(LuaHandle, -2);
@@ -3107,11 +2955,6 @@ namespace luautils
             luautils::OnCriticalHit(PTarget);
         }
         lua_pop(LuaHandle, 4);
-        if (returns > 4)
-        {
-            ShowError("luautils::onUseWeaponSkill (%s): 4 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 4);
-        }
         return std::make_tuple(dmg, tpHitsLanded, extraHitsLanded);
     }
 
@@ -3139,26 +2982,14 @@ namespace luautils
             CLuaAction LuaAction(action);
             Lunar<CLuaAction>::push(LuaHandle, &LuaAction);
 
-            if (lua_pcall(LuaHandle, 4, LUA_MULTRET, 0))
+            if (lua_pcall(LuaHandle, 4, 0, 0))
             {
                 ShowError("luautils::onMobWeaponSkill: %s\n", lua_tostring(LuaHandle, -1));
                 lua_pop(LuaHandle, 1);
             }
-            else
-            {
-                int32 returns = lua_gettop(LuaHandle) - oldtop;
-
-                if (returns > 0)
-                {
-                    ShowError("luautils::onMobWeaponSkill (%s): 0 return expected, got %d\n", File, returns);
-                    lua_pop(LuaHandle, returns - 1);
-                }
-            }
         }
 
-        oldtop = lua_gettop(LuaHandle);
-
-        snprintf(File, sizeof(File), "scripts/globals/mobskills/%s.lua", PMobSkill->getName());
+        snprintf((char*)File, sizeof(File), "scripts/globals/mobskills/%s.lua", PMobSkill->getName());
 
         if (prepFile(File, "onMobWeaponSkill"))
         {
@@ -3171,25 +3002,15 @@ namespace luautils
         CLuaMobSkill LuaMobSkill(PMobSkill);
         Lunar<CLuaMobSkill>::push(LuaHandle, &LuaMobSkill);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onMobWeaponSkill: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onMobWeaponSkill (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
+
         int32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onMobWeaponSkill (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3217,25 +3038,15 @@ namespace luautils
         CLuaMobSkill LuaMobSkill(PMobSkill);
         Lunar<CLuaMobSkill>::push(LuaHandle, &LuaMobSkill);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onMobSkillCheck (%s): %s\n", PMobSkill->getName(), lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onMobSkillCheck (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : -5);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onMobSkillCheck (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3257,25 +3068,15 @@ namespace luautils
         CLuaMobSkill LuaMobSkill(PMobSkill);
         Lunar<CLuaMobSkill>::push(LuaHandle, &LuaMobSkill);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::OnMobAutomatonSkillCheck (%s): %s\n", PMobSkill->getName(), lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::OnMobAutomatonSkillCheck (%s): 1 return expected, got %d\n", File, returns);
-            return -1;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : -5);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::OnMobAutomatonSkillCheck (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3287,10 +3088,15 @@ namespace luautils
 
     int32 OnMagicCastingCheck(CBaseEntity* PChar, CBaseEntity* PTarget, CSpell* PSpell)
     {
-        lua_prepscript(PSpell->getSpellGroup() == SPELLGROUP_BLUE ? "scripts/globals/spells/bluemagic/%s.lua" : "scripts/globals/spells/%s.lua", PSpell->getName());
+        lua_prepscript(
+            PSpell->getSpellGroup() == SPELLGROUP_BLUE ? "scripts/globals/spells/bluemagic/%s.lua" :
+            PSpell->getSpellGroup() == SPELLGROUP_TRUST ? "scripts/globals/spells/trust/%s.lua" :
+            "scripts/globals/spells/%s.lua", PSpell->getName()
+        );
 
         if (prepFile(File, "onMagicCastingCheck"))
         {
+            // ShowDebug("luautils::OnMagicCastingCheck: could not load %s/%s.lua \n", scriptPath, PSpell->getName());
             return 47;
         }
 
@@ -3303,25 +3109,15 @@ namespace luautils
         CLuaSpell LuaSpell(PSpell);
         Lunar<CLuaSpell>::push(LuaHandle, &LuaSpell);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 1, 0))
         {
             ShowError("luautils::onMagicCastingCheck (%s): %s\n", PSpell->getName(), lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 47;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onMagicCastingCheck (%s): 1 return expected, got %d\n", File, returns);
-            return 47;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : -5);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onMagicCastingCheck (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3347,7 +3143,7 @@ namespace luautils
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onAbilityCheck");
 
-        auto ret = luaL_loadfile(LuaHandle, File);
+        auto ret = luaL_loadfile(LuaHandle, (const char*)File);
         if (ret)
         {
             if (ret != LUA_ERRFILE)
@@ -3387,29 +3183,18 @@ namespace luautils
         CLuaAbility LuaAbility(PAbility);
         Lunar<CLuaAbility>::push(LuaHandle, &LuaAbility);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 2, 0))
         {
             ShowError("luautils::onAbilityCheck (%s): %s\n", PAbility->getName(), lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 87;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 2)
-        {
-            ShowError("luautils::onAbilityCheck (%s): 2 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-            return 87;
-        }
+
         if ((!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0) != 0)
             *PMsgTarget = (CBaseEntity*)PTarget;
 
         uint32 retVal = (!lua_isnil(LuaHandle, -2) && lua_isnumber(LuaHandle, -2) ? (int32)lua_tonumber(LuaHandle, -2) : -5);
         lua_pop(LuaHandle, 2);
-        if (returns > 2)
-        {
-            ShowError("luautils::onAbilityCheck (%s): 2 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 2);
-        }
         return retVal;
     }
 
@@ -3443,25 +3228,26 @@ namespace luautils
         CLuaAction LuaAction(action);
         Lunar<CLuaAction>::push(LuaHandle, &LuaAction);
 
-        if (lua_pcall(LuaHandle, 5, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 5, 1, 0))
         {
             ShowError("luautils::onPetAbility: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
+
+        // Bloodpact Skillups
+        if (PMob->objtype == TYPE_PET && map_config.skillup_bloodpact)
         {
-            ShowError("luautils::onPetAbility (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
+            CPetEntity* PPet = (CPetEntity*)PMob;
+            if (PPet->getPetType() == PETTYPE_AVATAR && PPet->PMaster->objtype == TYPE_PC)
+            {
+                CCharEntity* PMaster = (CCharEntity*)PPet->PMaster;
+                if (PMaster->GetMJob() == JOB_SMN) charutils::TrySkillUP(PMaster, SKILL_SUMMONING_MAGIC, PMaster->GetMLevel());
+            }
         }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onPetAbility (%s): 1 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3510,7 +3296,7 @@ namespace luautils
     {
         DSP_DEBUG_BREAK_IF(lua_isnil(L, -1) || !lua_isstring(L, -1));
 
-        const int8* varname = lua_tostring(L, -1);
+        const char* varname = lua_tostring(L, -1);
 
         Sql_Query(SqlHandle, "DELETE FROM char_vars WHERE varname = '%s';", varname);
 
@@ -3526,7 +3312,7 @@ namespace luautils
                 charutils::SaveCharPosition(PChar);
                 charutils::SaveCharStats(PChar);
                 charutils::SaveCharExp(PChar, PChar->GetMJob());
-                charutils::SaveCharPoints(PChar);
+                charutils::SaveCharUnlocks(PChar);
             });
         });
         exit(1);
@@ -3555,18 +3341,13 @@ namespace luautils
         CLuaInstance LuaInstance(PInstance);
         Lunar<CLuaInstance>::push(LuaHandle, &LuaInstance);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onInstanceZoneIn: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceZoneIn (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3584,18 +3365,13 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PChar);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::afterInstanceRegister: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::afterInstanceRegister (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return;
     }
 
@@ -3608,25 +3384,15 @@ namespace luautils
             return -1;
         }
 
-        if (lua_pcall(LuaHandle, 0, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 0, 1, 0))
         {
             ShowError("luautils::onInstanceLoadFailed: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onInstanceLoadFailed (%s): 1 return expected, got %d\n", File, returns);
-            return 0;
-        }
+
         uint32 retVal = (!lua_isnil(LuaHandle, -1) && lua_isnumber(LuaHandle, -1) ? (int32)lua_tonumber(LuaHandle, -1) : 0);
         lua_pop(LuaHandle, 1);
-        if (returns > 1)
-        {
-            ShowError("luautils::onInstanceLoadFailed (%s): 1 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns - 1);
-        }
         return retVal;
     }
 
@@ -3644,18 +3410,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, time);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onInstanceTimeUpdate: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceTimeUpdate (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3671,18 +3432,13 @@ namespace luautils
         CLuaInstance LuaInstance(PInstance);
         Lunar<CLuaInstance>::push(LuaHandle, &LuaInstance);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onInstanceFailure: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceFailure (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3694,8 +3450,6 @@ namespace luautils
 
     int32 OnInstanceCreated(CCharEntity* PChar, CInstance* PInstance)
     {
-        int32 oldtop = lua_gettop(LuaHandle);
-
         lua_pushnil(LuaHandle);
         lua_setglobal(LuaHandle, "onInstanceCreated");
 
@@ -3703,9 +3457,9 @@ namespace luautils
         if (luaL_loadfile(LuaHandle, PChar->m_event.Script.c_str()) || lua_pcall(LuaHandle, 0, 0, 0))
         {
             memset(File, 0, sizeof(File));
-            snprintf(File, sizeof(File), "scripts/zones/%s/Zone.lua", PChar->loc.zone->GetName());
+            snprintf((char*)File, sizeof(File), "scripts/zones/%s/Zone.lua", PChar->loc.zone->GetName());
 
-            if (luaL_loadfile(LuaHandle, File) || lua_pcall(LuaHandle, 0, 0, 0))
+            if (luaL_loadfile(LuaHandle, (const char*)File) || lua_pcall(LuaHandle, 0, 0, 0))
             {
                 ShowError("luautils::onInstanceCreated %s\n", lua_tostring(LuaHandle, -1));
                 lua_pop(LuaHandle, 1);
@@ -3737,18 +3491,13 @@ namespace luautils
             lua_pushnil(LuaHandle);
         }
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 0, 0))
         {
             ShowError("luautils::onInstanceCreated %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceCreated (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3770,18 +3519,13 @@ namespace luautils
         CLuaInstance LuaInstance(PInstance);
         Lunar<CLuaInstance>::push(LuaHandle, &LuaInstance);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onInstanceCreated %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceCreated (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3799,18 +3543,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, PInstance->GetProgress());
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onInstanceProgressUpdate %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceProgressUpdate (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3828,18 +3567,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, PInstance->GetStage());
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onInstanceStageChange %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceStageChange (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3855,18 +3589,13 @@ namespace luautils
         CLuaInstance LuaInstance(PInstance);
         Lunar<CLuaInstance>::push(LuaHandle, &LuaInstance);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onInstanceComplete %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onInstanceComplete (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -3921,7 +3650,7 @@ namespace luautils
         DSP_DEBUG_BREAK_IF(lua_isnil(L, -1) || !lua_isnumber(L, -1));
         DSP_DEBUG_BREAK_IF(lua_isnil(L, -2) || !lua_isstring(L, -2));
 
-        const int8* name = lua_tostring(L, -2);
+        const char* name = lua_tostring(L, -2);
         int32 value = (int32)lua_tointeger(L, -1);
 
         if (value == 0)
@@ -3954,18 +3683,37 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, TransportID);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onTransportEvent: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
+
+        return 0;
+    }
+
+    int32 OnTimeTrigger(CNpcEntity* PNpc, uint8 triggerID)
+    {
+        lua_prepscript("scripts/zones/%s/npcs/%s.lua", PNpc->loc.zone->GetName(), PNpc->GetName());
+
+        if (prepFile(File, "onTimeTrigger"))
         {
-            ShowError("luautils::onTransportEvent (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
+            return -1;
         }
+
+        CLuaBaseEntity LuaBaseEntity(PNpc);
+        Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
+
+        lua_pushinteger(LuaHandle, triggerID);
+
+        if (lua_pcall(LuaHandle, 2, 0, 0))
+        {
+            ShowError("luautils::onTimeTrigger: %s\n", lua_tostring(LuaHandle, -1));
+            lua_pop(LuaHandle, 1);
+            return -1;
+        }
+
         return 0;
     }
 
@@ -3982,18 +3730,13 @@ namespace luautils
 
         lua_pushinteger(LuaHandle, type);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onConquestUpdate: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onConquestUpdate (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -4018,18 +3761,13 @@ namespace luautils
         CLuaBattlefield LuaBattlefieldEntity(PBattlefield);
         Lunar<CLuaBattlefield>::push(LuaHandle, &LuaBattlefieldEntity);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onBcnmEnter: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onBcnmEnter (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -4065,20 +3803,15 @@ namespace luautils
 
         PChar->m_event.reset();
         PChar->m_event.Target = PChar;
-        PChar->m_event.Script.insert(0, File);
+        PChar->m_event.Script.insert(0, (const char*)File);
 
-        if (lua_pcall(LuaHandle, 3, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 3, 0, 0))
         {
             ShowError("luautils::onBcnmLeave: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onBcnmLeave (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
+
         return 0;
     }
 
@@ -4106,19 +3839,13 @@ namespace luautils
 
         CLuaBattlefield LuaBattlefieldEntity(PBattlefield);
         Lunar<CLuaBattlefield>::push(LuaHandle, &LuaBattlefieldEntity);
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 0, 0))
         {
             ShowError("luautils::onBcnmRegister: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
 
-        if (returns > 0)
-        {
-            ShowError("luautils::onBcnmRegister (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
         return 0;
     }
 
@@ -4138,19 +3865,13 @@ namespace luautils
         CLuaBattlefield LuaBattlefieldEntity(PBattlefield);
         Lunar<CLuaBattlefield>::push(LuaHandle, &LuaBattlefieldEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onBcnmDestroy: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return 0;
         }
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
 
-        if (returns > 0)
-        {
-            ShowError("luautils::onBcnmDestroy (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
         return 0;
     }
     /************************************************************************
@@ -4274,53 +3995,19 @@ namespace luautils
     {
         DropList_t* DropList = itemutils::GetDropList((uint16)lua_tointeger(L, 1));
 
-        for (uint8 i = 0; i < DropList->size(); ++i)
+        if (DropList != nullptr)
         {
-            if (DropList->at(i).ItemID == lua_tointeger(L, 2))
+            for (uint8 i = 0; i < DropList->Items.size(); ++i)
             {
-                DropList->at(i).DropRate = (uint16)lua_tointeger(L, 3);
-                return 1;
+                if (DropList->Items.at(i).ItemID == lua_tointeger(L, 2))
+                {
+                    DropList->Items.at(i).DropRate = (uint16)lua_tointeger(L, 3);
+                    return 1;
+                }
             }
         }
 
         return 0;
-    }
-
-    /******************************************************************************
-    *                                                                             *
-    * Update the Treasure spawn point to a new point, retrieved from the database *
-    *                                                                             *
-    *******************************************************************************/
-    int32 UpdateTreasureSpawnPoint(lua_State* L)
-    {
-        // TODO: check respawn time
-        if (!lua_isnil(L, 1) && lua_isnumber(L, 1))
-        {
-            uint32 npcid = (uint32)lua_tointeger(L, 1);
-
-            uint32 OpenTime = 300000; // 5 min respawn
-
-            if (!lua_isnil(L, 2) && lua_isboolean(L, 2))
-            {
-                if (lua_toboolean(L, 2) == 1)
-                {
-                    OpenTime = 3000; // respawn immediately (3 sec)
-                }
-            }
-
-            zoneutils::UpdateTreasureSpawnPoint(npcid, OpenTime);
-
-            CBaseEntity* PNpc = zoneutils::GetEntity(npcid, TYPE_NPC);
-            if (PNpc)
-            {
-                PNpc->status = STATUS_DISAPPEAR;
-                PNpc->loc.zone->PushPacket(PNpc, CHAR_INRANGE, new CEntityUpdatePacket(PNpc, ENTITY_DESPAWN, UPDATE_NONE));
-            }
-
-            return 0;
-        }
-        lua_pushnil(L);
-        return 1;
     }
 
     int32 getAbility(lua_State* L)
@@ -4376,9 +4063,9 @@ namespace luautils
             return 1;
         }
 
-        while (fgets(line, sizeof(line), fp))
+        while (fgets((char*)line, sizeof(line), fp))
         {
-            string_t sline(line);
+            string_t sline((const char*)line);
             map_config.server_message += sline;
         }
 
@@ -4392,9 +4079,9 @@ namespace luautils
             return 1;
         }
 
-        while (fgets(line, sizeof(line), fp))
+        while (fgets((char*)line, sizeof(line), fp))
         {
-            string_t sline(line);
+            string_t sline((const char*)line);
             map_config.server_message_fr += sline;
         }
 
@@ -4455,18 +4142,11 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PChar);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onPlayerLevelUp: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
-        }
-
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onPlayerLevelUp (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
         }
 
         return 0;
@@ -4481,18 +4161,11 @@ namespace luautils
         CLuaBaseEntity LuaBaseEntity(PChar);
         Lunar<CLuaBaseEntity>::push(LuaHandle, &LuaBaseEntity);
 
-        if (lua_pcall(LuaHandle, 1, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 1, 0, 0))
         {
             ShowError("luautils::onPlayerLevelDown: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return -1;
-        }
-
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns > 0)
-        {
-            ShowError("luautils::onPlayerLevelDown (%s): 0 returns expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
         }
 
         return 0;
@@ -4510,25 +4183,13 @@ namespace luautils
 
         lua_pushboolean(LuaHandle, pre);
 
-        if (lua_pcall(LuaHandle, 2, LUA_MULTRET, 0))
+        if (lua_pcall(LuaHandle, 2, 1, 0))
         {
             ShowError("luautils::onChocoboDig: %s\n", lua_tostring(LuaHandle, -1));
             lua_pop(LuaHandle, 1);
             return false;
         }
 
-        int32 returns = lua_gettop(LuaHandle) - oldtop;
-        if (returns < 1)
-        {
-            ShowError("luautils::onChocoboDig (%s): 1 return expected, got %d\n", File, returns);
-            return false;
-        }
-
-        if (returns > 1)
-        {
-            ShowError("luautils::onChocoboDig (%s): 1 return expected, got %d\n", File, returns);
-            lua_pop(LuaHandle, returns);
-        }
         bool canDig = lua_toboolean(LuaHandle, -1);
         lua_pop(LuaHandle, 1);
 
@@ -4560,8 +4221,20 @@ namespace luautils
         };
 
         return searchLuaFileForFunction(PChar->m_event.Script) ||
-            (PChar->PInstance && searchLuaFileForFunction(std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/instances/" + PChar->PInstance->GetName())) ||
-            (searchLuaFileForFunction(std::string("scripts/zones/") + PChar->loc.zone->GetName() + "/Zone.lua"));
+            (PChar->PInstance && searchLuaFileForFunction(std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/instances/" + (const char*)PChar->PInstance->GetName())) ||
+            (searchLuaFileForFunction(std::string("scripts/zones/") + (const char*)PChar->loc.zone->GetName() + "/Zone.lua"));
+    }
+
+    uint16 GetDespoilDebuff(uint16 itemId)
+    {
+        uint16 effectId = 0;
+        int32 ret = Sql_Query(SqlHandle, "SELECT effectId FROM despoil_effects WHERE itemId = %u", itemId);
+        if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0 && Sql_NextRow(SqlHandle) == SQL_SUCCESS)
+        {
+            effectId = (uint16)Sql_GetUIntData(SqlHandle, 0);
+        }
+
+        return effectId;
     }
 
 }; // namespace luautils

@@ -44,7 +44,6 @@ When a status effect is gained twice on a player. It can do one or more of the f
 
 #include "packets/char_health.h"
 #include "packets/char_job_extra.h"
-#include "packets/char_sync.h"
 #include "packets/char_update.h"
 #include "packets/message_basic.h"
 #include "packets/party_effects.h"
@@ -126,7 +125,7 @@ namespace effects
             {
                 uint16 EffectID = (uint16)Sql_GetIntData(SqlHandle, 0);
 
-                EffectsParams[EffectID].Name = Sql_GetData(SqlHandle, 1);
+                EffectsParams[EffectID].Name = (const char*)Sql_GetData(SqlHandle, 1);
                 EffectsParams[EffectID].Flag = Sql_GetIntData(SqlHandle, 2);
                 EffectsParams[EffectID].Type = Sql_GetIntData(SqlHandle, 3);
                 EffectsParams[EffectID].NegativeId = (EFFECT)Sql_GetIntData(SqlHandle, 4);
@@ -183,7 +182,7 @@ uint8 CStatusEffectContainer::GetEffectsCount(EFFECT ID)
 
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() == ID)
+        if (m_StatusEffectList.at(i)->GetStatusID() == ID && !m_StatusEffectList.at(i)->deleted)
         {
             count++;
         }
@@ -191,8 +190,9 @@ uint8 CStatusEffectContainer::GetEffectsCount(EFFECT ID)
     return count;
 }
 
-bool CStatusEffectContainer::CanGainStatusEffect(EFFECT statusEffect, uint16 power)
+bool CStatusEffectContainer::CanGainStatusEffect(CStatusEffect* PStatusEffect)
 {
+    EFFECT statusEffect = PStatusEffect->GetStatusID();
     // check for immunities first
     switch (statusEffect) {
         case EFFECT_SLEEP:
@@ -230,6 +230,8 @@ bool CStatusEffectContainer::CanGainStatusEffect(EFFECT statusEffect, uint16 pow
         case EFFECT_REQUIEM:
             if (m_POwner->hasImmunity(IMMUNITY_REQUIEM)) return false;
             break;
+        default:
+            break;
     }
 
     // make sure pets can't be charmed
@@ -237,8 +239,6 @@ bool CStatusEffectContainer::CanGainStatusEffect(EFFECT statusEffect, uint16 pow
     {
         return false;
     }
-
-    CStatusEffect* PStatusEffect;
 
     // check if a status effect blocks this
     EFFECT blockId = effects::EffectsParams[statusEffect].BlockId;
@@ -249,46 +249,52 @@ bool CStatusEffectContainer::CanGainStatusEffect(EFFECT statusEffect, uint16 pow
     // check if negative is strong enough to stop this
     EFFECT negativeId = effects::EffectsParams[statusEffect].NegativeId;
     if (negativeId != 0) {
-        PStatusEffect = GetStatusEffect(negativeId);
+        CStatusEffect* negativeEffect = GetStatusEffect(negativeId);
 
-        if (PStatusEffect != nullptr) {
+        if (negativeEffect != nullptr) {
 
-            if (statusEffect == EFFECT_HASTE && PStatusEffect->GetStatusID() == EFFECT_SLOW && PStatusEffect->GetSubPower() == 1)
+            if (statusEffect == EFFECT_HASTE && negativeEffect->GetStatusID() == EFFECT_SLOW && negativeEffect->GetSubPower() == 1)
             {
                 // slow i remote
                 return true;
             }
 
+            if (PStatusEffect->GetTier() != 0 && negativeEffect->GetTier() != 0)
+            {
+                return PStatusEffect->GetTier() == negativeEffect->GetTier() ? statusEffect > negativeId : PStatusEffect->GetTier() > negativeEffect->GetTier();
+            }
+
             // new status effect must be stronger
-            return power >= PStatusEffect->GetPower();
+            return PStatusEffect->GetPower() >= negativeEffect->GetPower();
         }
     }
 
-    PStatusEffect = GetStatusEffect(statusEffect);
+    CStatusEffect* existingEffect = GetStatusEffect(statusEffect);
 
     // check overwrite
-    if (PStatusEffect != nullptr) {
-        uint16 currentPower = PStatusEffect->GetPower();
+    if (existingEffect != nullptr) {
         EFFECTOVERWRITE overwrite = effects::EffectsParams[statusEffect].Overwrite;
 
-        if (overwrite == EFFECTOVERWRITE_ALWAYS || overwrite == EFFECTOVERWRITE_IGNORE) {
+        if (overwrite == EFFECTOVERWRITE_ALWAYS || overwrite == EFFECTOVERWRITE_IGNORE)
             return true;
-        }
-
-        if (overwrite == EFFECTOVERWRITE_NEVER) {
+        else if (overwrite == EFFECTOVERWRITE_NEVER)
             return false;
+        else if (overwrite == EFFECTOVERWRITE_EQUAL_HIGHER)
+        {
+            if (PStatusEffect->GetTier() != 0 && existingEffect->GetTier() != 0)
+                return PStatusEffect->GetTier() >= existingEffect->GetTier();
+            return PStatusEffect->GetPower() >= existingEffect->GetPower();
         }
-
-        if (overwrite == EFFECTOVERWRITE_EQUAL_HIGHER) {
-            if (power >= currentPower) {
-                return true;
-            }
+        else if (overwrite == EFFECTOVERWRITE_HIGHER)
+        {
+            if (PStatusEffect->GetTier() != 0 && existingEffect->GetTier() != 0)
+                return PStatusEffect->GetTier() > existingEffect->GetTier();
+            return PStatusEffect->GetPower() > existingEffect->GetPower();
         }
-        else if (overwrite == EFFECTOVERWRITE_HIGHER) {
-            // overwrite only if higher
-            if (power > currentPower) {
-                return true;
-            }
+        else if (overwrite == EFFECTOVERWRITE_TIER_HIGHER)
+        {
+            if (PStatusEffect->GetTier() != 0 && existingEffect->GetTier() != 0)
+                return PStatusEffect->GetTier() > existingEffect->GetTier();
         }
 
         return false;
@@ -320,10 +326,10 @@ void CStatusEffectContainer::OverwriteStatusEffect(CStatusEffect* StatusEffect)
 }
 
 /************************************************************************
-*																		*
-*  Добавляем статус-эффект в контейнер									*
-*  Если не ошибаюсь, то максимально-возможное количество эффектов 32 	*
-*																		*
+*                                                                       *
+*  Добавляем статус-эффект в контейнер                                  *
+*  Если не ошибаюсь, то максимально-возможное количество эффектов 32    *
+*                                                                       *
 ************************************************************************/
 
 bool CStatusEffectContainer::AddStatusEffect(CStatusEffect* PStatusEffect, bool silent)
@@ -340,9 +346,8 @@ bool CStatusEffectContainer::AddStatusEffect(CStatusEffect* PStatusEffect, bool 
         return false;
     }
 
-    if (CanGainStatusEffect((EFFECT)statusId, PStatusEffect->GetPower()))
+    if (CanGainStatusEffect(PStatusEffect))
     {
-
         // check for minimum duration
         if (PStatusEffect->GetDuration() < effects::EffectsParams[statusId].MinDuration) {
             PStatusEffect->SetDuration(effects::EffectsParams[statusId].MinDuration);
@@ -396,83 +401,119 @@ bool CStatusEffectContainer::AddStatusEffect(CStatusEffect* PStatusEffect, bool 
                 PChar->PLatentEffectContainer->CheckLatentsRollSong();
                 PChar->UpdateHealth();
             }
-            PChar->pushPacket(new CCharSyncPacket(PChar));
         }
         m_POwner->updatemask |= UPDATE_HP;
 
         return true;
+    }
+    else
+    {
+        delete PStatusEffect;
     }
 
     return false;
 }
 
 /************************************************************************
-*																		*
-*  Эффекты во всех методах удаляются одинаково, вынес этот код в		*
-*  отдельную функцию. Удаляем иконки только у CharEntity.				*
-*																		*
+*                                                                       *
+*  Эффекты во всех методах удаляются одинаково, вынес этот код в        *
+*  отдельную функцию. Удаляем иконки только у CharEntity.               *
+*                                                                       *
 ************************************************************************/
+
+void CStatusEffectContainer::DeleteStatusEffects()
+{
+    bool update_icons = false;
+    bool effects_removed = false;
+    for (auto effect_iter = m_StatusEffectList.begin(); effect_iter != m_StatusEffectList.end();)
+    {
+        auto PStatusEffect = *effect_iter;
+        if (PStatusEffect->deleted)
+        {
+            if (PStatusEffect->GetIcon() != 0)
+            {
+                update_icons = true;
+            }
+            effect_iter = m_StatusEffectList.erase(effect_iter);
+            delete PStatusEffect;
+            effects_removed = true;
+        }
+        else
+        {
+            ++effect_iter;
+        }
+    }
+
+    if (effects_removed)
+    {
+        if (m_POwner->objtype == TYPE_PC)
+        {
+            CCharEntity* PChar = (CCharEntity*)m_POwner;
+
+            if (update_icons)
+            {
+                UpdateStatusIcons();
+            }
+
+            //check for latents
+            PChar->PLatentEffectContainer->CheckLatentsFoodEffect();
+            PChar->PLatentEffectContainer->CheckLatentsStatusEffect();
+            PChar->PLatentEffectContainer->CheckLatentsRollSong();
+        }
+        m_POwner->UpdateHealth();
+    }
+}
 
 void CStatusEffectContainer::RemoveStatusEffect(uint32 id, bool silent)
 {
     CStatusEffect* PStatusEffect = m_StatusEffectList.at(id);
-
-    if (PStatusEffect->GetStatusID() >= EFFECT_FIRE_MANEUVER &&
-        PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER &&
-        m_POwner->objtype == TYPE_PC)
+    if (!PStatusEffect->deleted)
     {
-        puppetutils::CheckAttachmentsForManeuver((CCharEntity*)m_POwner, PStatusEffect->GetStatusID(), false);
-    }
-
-    m_StatusEffectList.erase(m_StatusEffectList.begin() + id);
-    luautils::OnEffectLose(m_POwner, PStatusEffect);
-    m_POwner->PAI->EventHandler.triggerListener("EFFECT_LOSE", m_POwner, PStatusEffect);
-
-    m_POwner->delModifiers(&PStatusEffect->modList);
-    m_POwner->UpdateHealth();
-
-    if (m_POwner->objtype == TYPE_PC)
-    {
-        CCharEntity* PChar = (CCharEntity*)m_POwner;
-
-        if (PStatusEffect->GetIcon() != 0)
+        if (PStatusEffect->GetStatusID() >= EFFECT_FIRE_MANEUVER &&
+            PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER &&
+            m_POwner->objtype == TYPE_PC)
         {
-            UpdateStatusIcons();
-            if (silent == false)
+            puppetutils::CheckAttachmentsForManeuver((CCharEntity*)m_POwner, PStatusEffect->GetStatusID(), false);
+        }
+        PStatusEffect->deleted = true;
+        luautils::OnEffectLose(m_POwner, PStatusEffect);
+        m_POwner->PAI->EventHandler.triggerListener("EFFECT_LOSE", m_POwner, PStatusEffect);
+
+        m_POwner->delModifiers(&PStatusEffect->modList);
+        if (m_POwner->objtype == TYPE_PC)
+        {
+            CCharEntity* PChar = (CCharEntity*)m_POwner;
+
+            if (PStatusEffect->GetIcon() != 0)
             {
-                PChar->pushPacket(new CMessageBasicPacket(PChar, PChar, PStatusEffect->GetIcon(), 0, 206));
+                if (!silent)
+                {
+                    PChar->pushPacket(new CMessageBasicPacket(PChar, PChar, PStatusEffect->GetIcon(), 0, 206));
+                }
             }
         }
-        //check for latents
-        PChar->PLatentEffectContainer->CheckLatentsFoodEffect();
-        PChar->PLatentEffectContainer->CheckLatentsStatusEffect();
-        PChar->PLatentEffectContainer->CheckLatentsRollSong();
-        PChar->UpdateHealth();
-
-        PChar->pushPacket(new CCharSyncPacket(PChar));
-    }
-    else
-    {
-        if (silent == false && PStatusEffect->GetIcon() != 0 && ((PStatusEffect->GetFlag() & EFFECTFLAG_NO_LOSS_MESSAGE) == 0) && !m_POwner->isDead())
+        else
         {
-            m_POwner->loc.zone->PushPacket(m_POwner, CHAR_INRANGE, new CMessageBasicPacket(m_POwner, m_POwner, PStatusEffect->GetIcon(), 0, 206));
+            if (silent == false && PStatusEffect->GetIcon() != 0 && ((PStatusEffect->GetFlag() & EFFECTFLAG_NO_LOSS_MESSAGE) == 0) && !m_POwner->isDead())
+            {
+                m_POwner->loc.zone->PushPacket(m_POwner, CHAR_INRANGE, new CMessageBasicPacket(m_POwner, m_POwner, PStatusEffect->GetIcon(), 0, 206));
+            }
         }
     }
-    delete PStatusEffect;
 }
 
 /************************************************************************
-*																		*
-*  Удаляем статус-эффект по его основному и дополнительному типам.		*
-*  Возвращаем результат выполнения операции.							*
-*																		*
+*                                                                       *
+*  Удаляем статус-эффект по его основному и дополнительному типам.      *
+*  Возвращаем результат выполнения операции.                            *
+*                                                                       *
 ************************************************************************/
 
 bool CStatusEffectContainer::DelStatusEffect(EFFECT StatusID)
 {
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID)
+        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID && !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect(i);
             return true;
@@ -485,7 +526,7 @@ bool CStatusEffectContainer::DelStatusEffectSilent(EFFECT StatusID)
 {
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID)
+        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID && !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect(i, true);
             return true;
@@ -499,7 +540,8 @@ bool CStatusEffectContainer::DelStatusEffect(EFFECT StatusID, uint16 SubID)
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
-            (m_StatusEffectList.at(i)->GetSubID() == SubID))
+            m_StatusEffectList.at(i)->GetSubID() == SubID &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect(i);
             return true;
@@ -513,7 +555,8 @@ bool CStatusEffectContainer::DelStatusEffectByTier(EFFECT StatusID, uint16 tier)
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
-            (m_StatusEffectList.at(i)->GetTier() == tier))
+            m_StatusEffectList.at(i)->GetTier() == tier &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect(i, true);
             return true;
@@ -523,9 +566,9 @@ bool CStatusEffectContainer::DelStatusEffectByTier(EFFECT StatusID, uint16 tier)
 }
 
 /************************************************************************
-*																		*
-*  Deletes all status effects without sending messages              	*
-*																		*
+*                                                                       *
+*  Deletes all status effects without sending messages                  *
+*                                                                       *
 ************************************************************************/
 void CStatusEffectContainer::KillAllStatusEffect()
 {
@@ -549,9 +592,9 @@ void CStatusEffectContainer::KillAllStatusEffect()
 }
 
 /************************************************************************
-*																		*
-*  Удаляем все эффекты с указанными иконками    						*
-*																		*
+*                                                                       *
+*  Удаляем все эффекты с указанными иконками                            *
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::DelStatusEffectsByIcon(uint16 IconID)
@@ -562,7 +605,7 @@ void CStatusEffectContainer::DelStatusEffectsByIcon(uint16 IconID)
         {
             // This covers all effects that client can remove. Function not used for anything the server removes.
             if (!(m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_NO_CANCEL))
-                RemoveStatusEffect(i--);
+                RemoveStatusEffect(i);
         }
     }
 }
@@ -575,7 +618,7 @@ void CStatusEffectContainer::DelStatusEffectsByType(uint16 Type)
     {
         if (m_StatusEffectList.at(i)->GetType() == Type)
         {
-            RemoveStatusEffect(i--, true);
+            RemoveStatusEffect(i, true);
         }
     }
 }
@@ -592,16 +635,16 @@ void CStatusEffectContainer::DelStatusEffectsByFlag(uint32 flag, bool silent)
     {
         if (m_StatusEffectList.at(i)->GetFlag() & flag)
         {
-            RemoveStatusEffect(i--, silent);
+            RemoveStatusEffect(i, silent);
         }
     }
 }
 
 /************************************************************************
-*																		*
-*  Удаляем первый добавленный отрицательный эффект с флагом	erase.      *
-*  Возвращаем результат выполнения операции.							*
-*																		*
+*                                                                       *
+*  Удаляем первый добавленный отрицательный эффект с флагом erase.      *
+*  Возвращаем результат выполнения операции.                            *
+*                                                                       *
 ************************************************************************/
 
 EFFECT CStatusEffectContainer::EraseStatusEffect()
@@ -610,7 +653,8 @@ EFFECT CStatusEffectContainer::EraseStatusEffect()
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_ERASABLE &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             erasableList.push_back(i);
         }
@@ -632,7 +676,8 @@ EFFECT CStatusEffectContainer::HealingWaltz()
     {
         if ((m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_WALTZABLE ||
             m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_ERASABLE) &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             waltzableList.push_back(i);
         }
@@ -657,7 +702,8 @@ uint8 CStatusEffectContainer::EraseAllStatusEffect()
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_ERASABLE &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect(i);
             count++;
@@ -667,19 +713,20 @@ uint8 CStatusEffectContainer::EraseAllStatusEffect()
 }
 
 /************************************************************************
-*																		*
+*                                                                       *
 *  Удаляем первый добавленный положительный эффект с флагом dispel.     *
-*  Возвращаем результат выполнения операции.							*
-*																		*
+*  Возвращаем результат выполнения операции.                            *
+*                                                                       *
 ************************************************************************/
 
 EFFECT CStatusEffectContainer::DispelStatusEffect(EFFECTFLAG flag)
 {
-    std::vector<uint16>	dispelableList;
+    std::vector<uint16> dispelableList;
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetFlag() & flag &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             dispelableList.push_back(i);
         }
@@ -704,10 +751,10 @@ uint8 CStatusEffectContainer::DispelAllStatusEffect(EFFECTFLAG flag)
     for (size_t i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetFlag() & flag &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             RemoveStatusEffect((uint32)i, true);
-            i--;
             count++;
         }
     }
@@ -715,16 +762,17 @@ uint8 CStatusEffectContainer::DispelAllStatusEffect(EFFECTFLAG flag)
 }
 
 /************************************************************************
-*																		*
-*  Проверяем наличие статус-эффекта	в контейнере						*
-*																		*
+*                                                                       *
+*  Проверяем наличие статус-эффекта в контейнере                        *
+*                                                                       *
 ************************************************************************/
 
 bool CStatusEffectContainer::HasStatusEffect(EFFECT StatusID)
 {
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID)
+        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             return true;
         }
@@ -737,7 +785,8 @@ bool CStatusEffectContainer::HasStatusEffectByFlag(uint32 flag)
 
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetFlag() & flag)
+        if (m_StatusEffectList.at(i)->GetFlag() & flag &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             return true;
         }
@@ -802,8 +851,8 @@ bool CStatusEffectContainer::ApplyBardEffect(CStatusEffect* PStatusEffect, uint8
 bool CStatusEffectContainer::ApplyCorsairEffect(CStatusEffect* PStatusEffect, uint8 maxRolls, uint8 bustDuration)
 {
     //break if not a COR roll.
-    DSP_DEBUG_BREAK_IF(!(PStatusEffect->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
-        PStatusEffect->GetStatusID() <= EFFECT_SCHOLARS_ROLL));
+    DSP_DEBUG_BREAK_IF(!((PStatusEffect->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
+        PStatusEffect->GetStatusID() <= EFFECT_NATURALISTS_ROLL) || (PStatusEffect->GetStatusID() == EFFECT_RUNEISTS_ROLL)));
 
     //if all match tier/id/effect then overwrite
 
@@ -816,7 +865,8 @@ bool CStatusEffectContainer::ApplyCorsairEffect(CStatusEffect* PStatusEffect, ui
     for (auto&& PEffect : m_StatusEffectList)
     {
         if ((PEffect->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
-            PEffect->GetStatusID() <= EFFECT_SCHOLARS_ROLL) ||
+            PEffect->GetStatusID() <= EFFECT_NATURALISTS_ROLL) ||
+            PEffect->GetStatusID() == EFFECT_RUNEISTS_ROLL ||
             PEffect->GetStatusID() == EFFECT_BUST)//is a cor effect
         {
             if (PEffect->GetStatusID() == PStatusEffect->GetStatusID() &&
@@ -881,7 +931,8 @@ bool CStatusEffectContainer::HasCorsairEffect(uint32 charid)
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if ((m_StatusEffectList.at(i)->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
-            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_SCHOLARS_ROLL) ||
+            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_NATURALISTS_ROLL) ||
+            m_StatusEffectList.at(i)->GetStatusID() == EFFECT_RUNEISTS_ROLL ||
             m_StatusEffectList.at(i)->GetStatusID() == EFFECT_BUST)//is a cor effect
         {
             if (m_StatusEffectList.at(i)->GetSubID() == charid ||
@@ -900,7 +951,8 @@ void CStatusEffectContainer::Fold(uint32 charid)
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if ((m_StatusEffectList.at(i)->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
-            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_SCHOLARS_ROLL) ||
+            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_NATURALISTS_ROLL) ||
+            m_StatusEffectList.at(i)->GetStatusID() == EFFECT_RUNEISTS_ROLL ||
             m_StatusEffectList.at(i)->GetStatusID() == EFFECT_BUST)//is a cor effect
         {
             if (m_StatusEffectList.at(i)->GetSubID() == charid ||
@@ -935,7 +987,8 @@ uint8 CStatusEffectContainer::GetActiveManeuvers()
     for (auto PStatusEffect : m_StatusEffectList)
     {
         if (PStatusEffect->GetStatusID() >= EFFECT_FIRE_MANEUVER &&
-            PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER)
+            PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER &&
+            !PStatusEffect->deleted)
         {
             count++;
         }
@@ -951,7 +1004,8 @@ void CStatusEffectContainer::RemoveOldestManeuver()
     {
         CStatusEffect* PStatusEffect = m_StatusEffectList.at(i);
         if (PStatusEffect->GetStatusID() >= EFFECT_FIRE_MANEUVER &&
-            PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER)
+            PStatusEffect->GetStatusID() <= EFFECT_DARK_MANEUVER &&
+            !PStatusEffect->deleted)
         {
             if (!oldest || PStatusEffect->GetStartTime() < oldest->GetStartTime())
             {
@@ -973,14 +1027,14 @@ void CStatusEffectContainer::RemoveAllManeuvers()
         if (m_StatusEffectList.at(i)->GetStatusID() >= EFFECT_FIRE_MANEUVER &&
             m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_DARK_MANEUVER)
         {
-            RemoveStatusEffect(i--, true);
+            RemoveStatusEffect(i, true);
         }
     }
 }
 
 /************************************************************************
 *                                                                       *
-*  Проверяем наличие статус-эффекта	в контейнере с уникальным subid     *
+*  Проверяем наличие статус-эффекта в контейнере с уникальным subid     *
 *                                                                       *
 ************************************************************************/
 
@@ -989,7 +1043,8 @@ bool CStatusEffectContainer::HasStatusEffect(EFFECT StatusID, uint16 SubID)
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
-            (m_StatusEffectList.at(i)->GetSubID() == SubID))
+            m_StatusEffectList.at(i)->GetSubID() == SubID &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             return true;
         }
@@ -1001,11 +1056,14 @@ bool CStatusEffectContainer::HasStatusEffect(std::initializer_list<EFFECT> effec
 {
     for (auto&& effect_from_list : m_StatusEffectList)
     {
-        for (auto&& effect_to_check : effects)
+        if (!effect_from_list->deleted)
         {
-            if (effect_to_check == effect_from_list->GetStatusID())
+            for (auto&& effect_to_check : effects)
             {
-                return true;
+                if (effect_to_check == effect_from_list->GetStatusID())
+                {
+                    return true;
+                }
             }
         }
     }
@@ -1016,12 +1074,13 @@ CStatusEffect* CStatusEffectContainer::GetStatusEffect(EFFECT StatusID)
 {
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID)
+        if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             return m_StatusEffectList[i];
         }
     }
-    return 0;
+    return nullptr;
 }
 
 /************************************************************************
@@ -1035,12 +1094,13 @@ CStatusEffect* CStatusEffectContainer::GetStatusEffect(EFFECT StatusID, uint32 S
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
         if (m_StatusEffectList.at(i)->GetStatusID() == StatusID &&
-            (m_StatusEffectList.at(i)->GetSubID() == SubID))
+            m_StatusEffectList.at(i)->GetSubID() == SubID &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             return m_StatusEffectList[i];
         }
     }
-    return 0;
+    return nullptr;
 }
 
 /************************************************************************
@@ -1048,14 +1108,14 @@ CStatusEffect* CStatusEffectContainer::GetStatusEffect(EFFECT StatusID, uint32 S
 * Used in mob abilities
 ************************************************************************/
 
-CStatusEffect* CStatusEffectContainer::StealStatusEffect()
+CStatusEffect* CStatusEffectContainer::StealStatusEffect(EFFECTFLAG flag)
 {
-
     std::vector<uint16> dispelableList;
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetFlag() & EFFECTFLAG_DISPELABLE &&
-            m_StatusEffectList.at(i)->GetDuration() > 0)
+        if (m_StatusEffectList.at(i)->GetFlag() & flag &&
+            m_StatusEffectList.at(i)->GetDuration() > 0 &&
+            !m_StatusEffectList.at(i)->deleted)
         {
             dispelableList.push_back(i);
         }
@@ -1074,7 +1134,7 @@ CStatusEffect* CStatusEffectContainer::StealStatusEffect()
 
         return EffectCopy;
     }
-    return 0;
+    return nullptr;
 }
 
 /************************************************************************
@@ -1138,9 +1198,11 @@ void CStatusEffectContainer::SetEffectParams(CStatusEffect* StatusEffect)
     string_t name;
     EFFECT effect = StatusEffect->GetStatusID();
 
+    //Determine if this is a BRD Song or COR Effect.
     if (StatusEffect->GetSubID() == 0 || StatusEffect->GetSubID() > 20000 ||
         (effect >= EFFECT_REQUIEM && effect <= EFFECT_NOCTURNE) ||
-        (effect == EFFECT_DOUBLE_UP_CHANCE) || effect == EFFECT_BUST)
+        (effect >= EFFECT_DOUBLE_UP_CHANCE && effect <= EFFECT_NATURALISTS_ROLL) ||
+        effect == EFFECT_RUNEISTS_ROLL)
     {
         name.insert(0, "globals/effects/");
         name.insert(name.size(), effects::EffectsParams[effect].Name);
@@ -1150,7 +1212,7 @@ void CStatusEffectContainer::SetEffectParams(CStatusEffect* StatusEffect)
         if (Ptem != nullptr)
         {
             name.insert(0, "globals/items/");
-            name.insert(name.size(), Ptem->getName());
+            name.insert(name.size(), (const char*)Ptem->getName());
         }
     }
     StatusEffect->SetName(name);
@@ -1190,16 +1252,16 @@ void CStatusEffectContainer::SetEffectParams(CStatusEffect* StatusEffect)
 }
 
 /************************************************************************
-*																		*
-*  Загружаем эффекты персонажа											*
-*																		*
+*                                                                       *
+*  Загружаем эффекты персонажа                                          *
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::LoadStatusEffects()
 {
     DSP_DEBUG_BREAK_IF(m_POwner->objtype != TYPE_PC);
 
-    const int8* Query =
+    const char* Query =
         "SELECT "
         "effectid,"
         "icon,"
@@ -1251,9 +1313,9 @@ void CStatusEffectContainer::LoadStatusEffects()
 }
 
 /************************************************************************
-*																		*
-*  Сохраняем временные эффекты персонажа								*
-*																		*
+*                                                                       *
+*  Сохраняем временные эффекты персонажа                                *
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::SaveStatusEffects(bool logout)
@@ -1269,12 +1331,15 @@ void CStatusEffectContainer::SaveStatusEffects(bool logout)
         if (logout && PStatusEffect->GetFlag() & EFFECTFLAG_LOGOUT)
             continue;
 
+        if (PStatusEffect->deleted)
+            continue;
+
         auto realduration = std::chrono::milliseconds(PStatusEffect->GetDuration()) +
             PStatusEffect->GetStartTime() - server_clock::now();
 
         if (realduration > 0s)
         {
-            const int8* Query = "INSERT INTO char_effects (charid, effectid, icon, power, tick, duration, subid, subpower, tier) VALUES(%u,%u,%u,%u,%u,%u,%u,%u,%u);";
+            const char* Query = "INSERT INTO char_effects (charid, effectid, icon, power, tick, duration, subid, subpower, tier) VALUES(%u,%u,%u,%u,%u,%u,%u,%u,%u);";
 
             // save power of utsusemi and blink
             if (PStatusEffect->GetStatusID() == EFFECT_COPY_IMAGE) {
@@ -1315,9 +1380,9 @@ void CStatusEffectContainer::SaveStatusEffects(bool logout)
 }
 
 /************************************************************************
-*																		*
+*                                                                       *
 *  Expires status effects                                               *
-*																		*
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::CheckEffectsExpiry(time_point tick)
@@ -1331,15 +1396,16 @@ void CStatusEffectContainer::CheckEffectsExpiry(time_point tick)
         if (PStatusEffect->GetDuration() != 0 &&
             std::chrono::milliseconds(PStatusEffect->GetDuration()) + PStatusEffect->GetStartTime() <= tick && i < m_StatusEffectList.size())
         {
-            RemoveStatusEffect(i--);
+            RemoveStatusEffect(i);
         }
     }
+    DeleteStatusEffects();
 }
 
 /************************************************************************
-*																		*
+*                                                                       *
 *  Runs OnEffectTick for all status effects                             *
-*																		*
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::TickEffects(time_point tick)
@@ -1358,12 +1424,14 @@ void CStatusEffectContainer::TickEffects(time_point tick)
             }
         }
     }
+    DeleteStatusEffects();
+    m_POwner->PAI->EventHandler.triggerListener("EFFECTS_TICK", m_POwner);
 }
 
 /************************************************************************
-*																		*
-*  Tick regen/refresh/regain effects									*
-*																		*
+*                                                                       *
+*  Tick regen/refresh/regain effects                                    *
+*                                                                       *
 ************************************************************************/
 
 void CStatusEffectContainer::TickRegen(time_point tick)
@@ -1391,7 +1459,7 @@ void CStatusEffectContainer::TickRegen(time_point tick)
             if (damage > 0)
             {
                 DelStatusEffectSilent(EFFECT_HEALING);
-                m_POwner->addHP(-damage);
+                m_POwner->takeDamage(damage);
                 WakeUp();
             }
         }
@@ -1491,9 +1559,11 @@ bool CStatusEffectContainer::CheckForElevenRoll()
 {
     for (uint16 i = 0; i < m_StatusEffectList.size(); ++i)
     {
-        if (m_StatusEffectList.at(i)->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
-            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_SCHOLARS_ROLL &&
-            m_StatusEffectList.at(i)->GetSubPower() == 11)
+        if ((m_StatusEffectList.at(i)->GetStatusID() >= EFFECT_FIGHTERS_ROLL &&
+            m_StatusEffectList.at(i)->GetStatusID() <= EFFECT_NATURALISTS_ROLL &&
+            m_StatusEffectList.at(i)->GetSubPower() == 11) || (
+            m_StatusEffectList.at(i)->GetStatusID() == EFFECT_RUNEISTS_ROLL &&
+            m_StatusEffectList.at(i)->GetSubPower() == 11))
         {
             return true;
         }

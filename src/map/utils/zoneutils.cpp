@@ -64,45 +64,6 @@ void TOTDChange(TIMETYPE TOTD)
     }
 }
 
-void UpdateTreasureSpawnPoint(uint32 npcid, uint32 respawnTime)
-{
-    CBaseEntity* PNpc = zoneutils::GetEntity(npcid, TYPE_NPC);
-
-    int32 ret = Sql_Query(SqlHandle, "SELECT treasure_spawn_points.pos, treasure_spawn_points.pos_rot, treasure_spawn_points.pos_x, treasure_spawn_points.pos_y, treasure_spawn_points.pos_z, npc_list.content_tag FROM `treasure_spawn_points` INNER JOIN `npc_list` ON treasure_spawn_points.npcid = npc_list.npcid WHERE treasure_spawn_points.npcid=%u ORDER BY RAND() LIMIT 1", npcid);
-
-    if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0 && Sql_NextRow(SqlHandle) == SQL_SUCCESS)
-    {
-        const char* contentTag = Sql_GetData(SqlHandle, 5);
-
-        if (luautils::IsContentEnabled(contentTag) == false)
-        {
-            return;
-        }
-
-        if (PNpc != nullptr)
-        {
-            PNpc->loc.p.rotation = Sql_GetIntData(SqlHandle, 1);
-            PNpc->loc.p.x = Sql_GetFloatData(SqlHandle, 2);
-            PNpc->loc.p.y = Sql_GetFloatData(SqlHandle, 3);
-            PNpc->loc.p.z = Sql_GetFloatData(SqlHandle, 4);
-            // ShowDebug(CL_YELLOW"zoneutils::UpdateTreasureSpawnPoint: After %i - %d (%f, %f, %f), %d\n" CL_RESET, Sql_GetIntData(SqlHandle,0), PNpc->id, PNpc->loc.p.x,PNpc->loc.p.y,PNpc->loc.p.z, PNpc->loc.zone->GetID());
-            PNpc->PAI->QueueAction(queueAction_t(std::chrono::milliseconds(respawnTime), false, [](CBaseEntity* PNpc)
-            {
-                PNpc->status = STATUS_NORMAL;
-                PNpc->loc.zone->PushPacket(PNpc, CHAR_INRANGE, new CEntityUpdatePacket(PNpc, ENTITY_UPDATE, UPDATE_COMBAT));
-            }));
-        }
-        else
-        {
-            ShowDebug(CL_RED"zonetuils::UpdateTreasureSpawnPoint: treasure <%u> not found\n" CL_RESET, npcid);
-        }
-    }
-    else
-    {
-        ShowDebug(CL_RED"zonetuils::UpdateTreasureSpawnPoint: SQL error or treasure <%u> not found in treasurespawnpoints table.\n" CL_RESET, npcid);
-    }
-}
-
 /************************************************************************
 *                                                                       *
 *  Initialize weather for each zone and launch task if not weather      *
@@ -120,13 +81,13 @@ void InitializeWeather()
         }
         else
         {
-            try
+            if (!PZone.second->m_WeatherVector.empty())
             {
                 PZone.second->SetWeather((WEATHER)PZone.second->m_WeatherVector.at(0).common);
 
                 //ShowDebug(CL_YELLOW"zonetuils::InitializeWeather: Static weather of %s updated to %u\n" CL_RESET, PZone.second->GetName(), PZone.second->m_WeatherVector.at(0).m_common);
             }
-            catch (std::out_of_range&)
+            else
             {
                 PZone.second->SetWeather(WEATHER_NONE); // If not weather data found, initialize with WEATHER_NONE
 
@@ -155,14 +116,11 @@ void SavePlayTime()
 CZone* GetZone(uint16 ZoneID)
 {
     DSP_DEBUG_BREAK_IF(ZoneID >= MAX_ZONEID);
-    try
+    if (auto PZone = g_PZoneList.find(ZoneID); PZone != g_PZoneList.end())
     {
-        return g_PZoneList.at(ZoneID);
+        return PZone->second;
     }
-    catch (const std::out_of_range&)
-    {
-        return nullptr;
-    }
+    return nullptr;
 }
 
 CNpcEntity* GetTrigger(uint16 TargID, uint16 ZoneID)
@@ -257,7 +215,7 @@ CCharEntity* GetCharToUpdate(uint32 primary, uint32 ternary)
     CCharEntity* PPrimary = nullptr;
     CCharEntity* PSecondary = nullptr;
     CCharEntity* PTernary = nullptr;
-    
+
     for (auto PZone : g_PZoneList)
     {
         PZone.second->ForEachChar([primary, ternary, &PPrimary, &PSecondary, &PTernary](CCharEntity* PChar)
@@ -277,7 +235,7 @@ CCharEntity* GetCharToUpdate(uint32 primary, uint32 ternary)
     }
     if (PSecondary)
         return PSecondary;
-            
+
     return PTernary;
 }
 /************************************************************************
@@ -288,7 +246,7 @@ CCharEntity* GetCharToUpdate(uint32 primary, uint32 ternary)
 
 void LoadNPCList()
 {
-    const int8* Query =
+    const char* Query =
         "SELECT \
           npcid,\
           npc_list.name,\
@@ -318,7 +276,7 @@ void LoadNPCList()
     {
         while(Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
-            const char* contentTag = Sql_GetData(SqlHandle, 16);
+            const char* contentTag = (const char*)Sql_GetData(SqlHandle, 16);
 
             if (luautils::IsContentEnabled(contentTag) == false)
             {
@@ -334,7 +292,7 @@ void LoadNPCList()
                 PNpc->targid = NpcID & 0xFFF;
                 PNpc->id = NpcID;
 
-                PNpc->name.insert(0, Sql_GetData(SqlHandle, 1));
+                PNpc->name.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
 
                 PNpc->loc.p.rotation = (uint8)Sql_GetIntData(SqlHandle, 2);
                 PNpc->loc.p.x = Sql_GetFloatData(SqlHandle, 3);
@@ -385,7 +343,7 @@ void LoadMOBList()
     uint8 normalLevelRangeMin = luautils::GetSettingsVariable("NORMAL_MOB_MAX_LEVEL_RANGE_MIN");
     uint8 normalLevelRangeMax = luautils::GetSettingsVariable("NORMAL_MOB_MAX_LEVEL_RANGE_MAX");
 
-    const int8* Query =
+    const char* Query =
         "SELECT mob_groups.zoneid, mobname, mobid, pos_rot, pos_x, pos_y, pos_z, \
             respawntime, spawntype, dropid, mob_groups.HP, mob_groups.MP, minLevel, maxLevel, \
             modelid, mJob, sJob, cmbSkill, cmbDmgMult, cmbDelay, behavior, links, mobType, immunity, \
@@ -416,7 +374,7 @@ void LoadMOBList()
             {
                 CMobEntity* PMob = new CMobEntity;
 
-                PMob->name.insert(0, Sql_GetData(SqlHandle, 1));
+                PMob->name.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
                 PMob->id = (uint32)Sql_GetUIntData(SqlHandle, 2);
 
                 PMob->targid = (uint16)PMob->id & 0x0FFF;
@@ -554,8 +512,9 @@ void LoadMOBList()
             luautils::ApplyMixins(PMob);
             PMob->saveModifiers();
             PMob->saveMobModifiers();
+            PMob->m_AllowRespawn = PMob->m_SpawnType == SPAWNTYPE_NORMAL;
 
-            if (PMob->m_AllowRespawn = PMob->m_SpawnType == SPAWNTYPE_NORMAL)
+            if (PMob->m_AllowRespawn)
             {
                 PMob->Spawn();
             }
@@ -567,7 +526,7 @@ void LoadMOBList()
     });
 
     // attach pets to mobs
-    const int8* PetQuery =
+    const char* PetQuery =
         "SELECT mob_groups.zoneid, mob_mobid, pet_offset \
         FROM mob_pets \
         LEFT JOIN mob_spawn_points ON mob_pets.mob_mobid = mob_spawn_points.mobid \
@@ -622,7 +581,7 @@ void LoadMOBList()
 
 CZone* CreateZone(uint16 ZoneID)
 {
-    static const int8* Query =
+    static const char* Query =
         "SELECT zonetype FROM zone_settings "
         "WHERE zoneid = %u LIMIT 1";
 
@@ -657,7 +616,7 @@ void LoadZoneList()
     g_PTrigger = new CNpcEntity();  // нужно в конструкторе CNpcEntity задавать модель по умолчанию
 
     std::vector<uint16> zones;
-    const int8* query = "SELECT zoneid FROM zone_settings WHERE IF(%d <> 0, '%s' = zoneip AND %d = zoneport, TRUE);";
+    const char* query = "SELECT zoneid FROM zone_settings WHERE IF(%d <> 0, '%s' = zoneip AND %d = zoneport, TRUE);";
 
     int ret = Sql_Query(SqlHandle, query, map_ip.s_addr, inet_ntoa(map_ip), map_port);
 
@@ -1061,13 +1020,13 @@ void ForEachZone(std::function<void(CZone*)> func)
 uint64 GetZoneIPP(uint16 zoneID)
 {
     uint64 ipp = 0;
-    const int8* query = "SELECT zoneip, zoneport FROM zone_settings WHERE zoneid = %u;";
+    const char* query = "SELECT zoneip, zoneport FROM zone_settings WHERE zoneid = %u;";
 
     int ret = Sql_Query(SqlHandle, query, zoneID);
 
     if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0 && Sql_NextRow(SqlHandle) == SQL_SUCCESS)
     {
-        ipp = inet_addr(Sql_GetData(SqlHandle, 0));
+        ipp = inet_addr((const char*)Sql_GetData(SqlHandle, 0));
         uint64 port = Sql_GetUIntData(SqlHandle, 1);
         ipp |= (port << 32);
     }

@@ -2,42 +2,16 @@
 -- Area: Dynamis Xarcabard
 --  MOB: Icon Prototype
 -----------------------------------
-package.loaded["scripts/zones/Dynamis-Xarcabard/TextIDs"] = nil;
------------------------------------
-
-require("scripts/globals/status");
 require("scripts/globals/dynamis");
-require("scripts/zones/Dynamis-Xarcabard/TextIDs");
-
------------------------------------
--- onMobInitialize Action
------------------------------------
+require("scripts/globals/msg");
 
 function onMobInitialize(mob,target)
 end;
 
------------------------------------
--- onMobSpawn Action
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- onMobEngaged
------------------------------------
-
-function onMobEngaged(mob,target)
-end;
-
------------------------------------
--- onMobDeath
------------------------------------
-
 function onMobDeath(mob, player, isKiller)
-    
+
     local mobID = mob:getID();
-    
+
     -- Time Bonus: 043
     if (mobID == 17330814 and mob:isInBattlefieldList() == false) then
         player:addTimeToDynamis(30);
@@ -45,11 +19,11 @@ function onMobDeath(mob, player, isKiller)
     -- HP Bonus: 052
     elseif (mobID == 17330533) then
         player:restoreHP(2000);
-        player:messageBasic(024,(player:getMaxHP()-player:getHP()));
+        player:messageBasic(dsp.msg.basic.RECOVERS_HP,(player:getMaxHP()-player:getHP()));
     -- HP Bonus: 073
     elseif (mobID == 17330843) then
         player:restoreMP(2000);
-        player:messageBasic(025,(player:getMaxMP()-player:getMP()));
+        player:messageBasic(dsp.msg.basic.RECOVERS_MP,(player:getMaxMP()-player:getMP()));
     end
-    
+
 end;

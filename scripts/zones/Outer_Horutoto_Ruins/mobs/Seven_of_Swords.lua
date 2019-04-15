@@ -2,13 +2,9 @@
 -- Area: Outer Horutoto
 --  MOB: Seven of Swords
 -----------------------------------
-
-require("scripts/globals/groundsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkGoVregime(player,mob,666,3);
-end;
+    dsp.regime.checkRegime(player, mob, 666, 3, dsp.regime.type.GROUNDS)
+end

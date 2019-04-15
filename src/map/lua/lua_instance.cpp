@@ -76,7 +76,6 @@ inline int32 CLuaInstance::getAllies(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
     lua_createtable(L, (int)m_PLuaInstance->m_allyList.size(), 0);
-    int8 newTable = lua_gettop(L);
     int i = 1;
     for (auto member : m_PLuaInstance->m_allyList)
     {
@@ -98,7 +97,6 @@ inline int32 CLuaInstance::getChars(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
     lua_createtable(L, (int)m_PLuaInstance->m_charList.size(), 0);
-    int8 newTable = lua_gettop(L);
     int i = 1;
     for (auto member : m_PLuaInstance->m_charList)
     {
@@ -120,7 +118,6 @@ inline int32 CLuaInstance::getMobs(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
     lua_createtable(L, (int)m_PLuaInstance->m_mobList.size(), 0);
-    int8 newTable = lua_gettop(L);
     int i = 1;
     for (auto member : m_PLuaInstance->m_mobList)
     {
@@ -142,7 +139,6 @@ inline int32 CLuaInstance::getNpcs(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
     lua_createtable(L, (int)m_PLuaInstance->m_npcList.size(), 0);
-    int8 newTable = lua_gettop(L);
     int i = 1;
     for (auto member : m_PLuaInstance->m_npcList)
     {
@@ -164,7 +160,6 @@ inline int32 CLuaInstance::getPets(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
     lua_createtable(L, (int)m_PLuaInstance->m_petList.size(), 0);
-    int8 newTable = lua_gettop(L);
     int i = 1;
     for (auto member : m_PLuaInstance->m_petList)
     {
@@ -236,7 +231,7 @@ inline int32 CLuaInstance::getWipeTime(lua_State* L)
 {
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
 
-    lua_pushinteger(L, (lua_Integer)std::chrono::duration_cast<std::chrono::milliseconds>(m_PLuaInstance->GetWipeTime() - get_server_start_time()).count());
+    lua_pushinteger(L, (lua_Integer)std::chrono::duration_cast<std::chrono::milliseconds>(m_PLuaInstance->GetWipeTime()).count());
 
     return 1;
 }
@@ -316,7 +311,7 @@ inline int32 CLuaInstance::setWipeTime(lua_State* L)
     DSP_DEBUG_BREAK_IF(m_PLuaInstance == nullptr);
     DSP_DEBUG_BREAK_IF(lua_isnil(L, 1) || !lua_isnumber(L, 1));
 
-    m_PLuaInstance->SetWipeTime(get_server_start_time() + std::chrono::milliseconds(lua_tointeger(L, 1)));
+    m_PLuaInstance->SetWipeTime(std::chrono::milliseconds(lua_tointeger(L, 1)));
 
     return 0;
 }
@@ -400,7 +395,7 @@ inline int32 CLuaInstance::insertAlly(lua_State* L)
 *																		*
 ************************************************************************/
 
-const int8 CLuaInstance::className[] = "CInstance";
+const char CLuaInstance::className[] = "CInstance";
 Lunar<CLuaInstance>::Register_t CLuaInstance::methods[] =
 {
     LUNAR_DECLARE_METHOD(CLuaInstance, getID),

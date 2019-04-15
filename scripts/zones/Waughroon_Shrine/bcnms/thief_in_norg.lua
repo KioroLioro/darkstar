@@ -3,22 +3,20 @@
 -- Name: A Thief in Norg?!
 -- Norg Quest
 -----------------------------------
-package.loaded["scripts/zones/Waughroon_Shrine/TextIDs"] = nil;
------------------------------------
 
 require("scripts/globals/titles");
 require("scripts/globals/quests");
-require("scripts/zones/Waughroon_Shrine/TextIDs");
+local ID = require("scripts/zones/Waughroon_Shrine/IDs");
 
 -----------------------------------
 -- EXAMPLE SCRIPT
--- 
+--
 -- What should go here:
 -- giving key items, playing ENDING cutscenes
 --
 -- What should NOT go here:
 -- Handling of "battlefield" status, spawning of monsters,
--- putting loot into treasure pool, 
+-- putting loot into treasure pool,
 -- enforcing ANY rules (SJ/number of people/etc), moving
 -- chars around, playing entrance CSes (entrance CSes go in bcnm.lua)
 
@@ -43,9 +41,9 @@ function onBcnmLeave(player,instance,leavecode)
     
     
     if (leavecode == 2) then -- play end CS. Need time and battle id for record keeping + storage
-        player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,1,4);
+        player:startEvent(32001,1,1,1,instance:getTimeInside(),1,1,4);
     elseif (leavecode == 4) then
-        player:startEvent(0x7d02);
+        player:startEvent(32002);
     end
     
 end;
@@ -56,9 +54,9 @@ end;
     
 function onEventFinish(player,csid,option)
 -- print("bc finish csid "..csid.." and option "..option);
-        if (csid == 0x7d01 and player:getVar("aThiefinNorgCS") == 6) then
+        if (csid == 32001 and player:getVar("aThiefinNorgCS") == 6) then
             player:setVar("aThiefinNorgCS",7);
-            player:addKeyItem(CHARRED_HELM);
-            player:messageSpecial(KEYITEM_OBTAINED,CHARRED_HELM);
+            player:addKeyItem(dsp.ki.CHARRED_HELM);
+            player:messageSpecial(ID.text.KEYITEM_OBTAINED,dsp.ki.CHARRED_HELM);
         end
 end;

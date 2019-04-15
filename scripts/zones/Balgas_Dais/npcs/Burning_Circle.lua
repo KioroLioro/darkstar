@@ -1,15 +1,11 @@
 -----------------------------------
 -- Area: Balga's Dais
--- NPC:  Burning Circle
+--  NPC: Burning Circle
 -- Balga's Dais Burning Circle
 -- !pos 299 -123 345 146
 -------------------------------------
-package.loaded["scripts/zones/Balgas_Dais/TextIDs"] = nil;
--------------------------------------
-
 require("scripts/globals/keyitems");
 require("scripts/globals/bcnm");
-require("scripts/zones/Balgas_Dais/TextIDs");
 
     ---- 0: Rank 2 Final Mission for Bastok "The Emissary" and Sandy "Journey Abroad"
     ---- 1: Steamed Sprouts (BCNM 40, Star Orb)
@@ -30,10 +26,6 @@ require("scripts/zones/Balgas_Dais/TextIDs");
     ---- 16: Royale Ramble (KSNM 30, Lachesis Orb)
     ---- 17: Moa Constrictors (KSNM 30, Atropos Orb
 
------------------------------------
--- onTrade Action
------------------------------------
-
 function onTrade(player,npc,trade)
 
     if (TradeBCNM(player,player:getZoneID(),trade,npc)) then
@@ -42,10 +34,6 @@ function onTrade(player,npc,trade)
 
 end;
 
------------------------------------
--- onTrigger Action
------------------------------------
-
 function onTrigger(player,npc)
 
     if (EventTriggerBCNM(player,npc)) then
@@ -53,10 +41,6 @@ function onTrigger(player,npc)
     end
 
 end;
-
------------------------------------
--- onEventUpdate
------------------------------------
 
 function onEventUpdate(player,csid,option)
     -- printf("onUpdate CSID: %u",csid);
@@ -67,10 +51,6 @@ function onEventUpdate(player,csid,option)
     end
 
 end;
-
------------------------------------
--- onEventFinish Action
------------------------------------
 
 function onEventFinish(player,csid,option)
     -- printf("onFinish CSID: %u",csid);

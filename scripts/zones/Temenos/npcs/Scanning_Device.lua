@@ -4,29 +4,16 @@
 -- !pos
 -----------------------------------
 require("scripts/globals/limbus");
------------------------------------
--- onTrade Action
------------------------------------
-
 function onTrade(player,npc,trade)
 end;
 
------------------------------------
--- onTrigger Action
------------------------------------
-
 function onTrigger(player,npc)
 
-   player:startEvent(0x0079,511);
+   player:startEvent(121,511);
 
 end;
 
------------------------------------
--- onEventUpdate
------------------------------------
-
 function onEventUpdate(player,csid,option)
-  -- printf("CSID: %u",csid);
    printf("RESULT: %u",option);
    Xtime=0;
 --=player:getSpecialBattlefieldLeftTime();
@@ -59,13 +46,7 @@ Xtime=player:getSpecialBattlefieldLeftTime(4);
  player:updateEvent(0,Xtime,0,0,0,0,0,0);
 end;
 
------------------------------------
--- onEventFinish
------------------------------------
-
 function onEventFinish(player,csid,option)
-    -- printf("CSID: %u",csid);
-    -- printf("RESULT: %u",option);
    if (csid == 0) then
 
    end

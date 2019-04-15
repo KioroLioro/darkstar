@@ -2,28 +2,16 @@
 -- Area: Labyrinth of Onzozo
 --   NM: Ose
 -----------------------------------
+require("scripts/globals/mobs")
+-----------------------------------
 
------------------------------------
--- onMobDeath
------------------------------------
+function onMobInitialize(mob)
+    mob:setMobMod(dsp.mobMod.ADD_EFFECT, 1)
+end
+
+function onAdditionalEffect(mob, target, damage)
+    return dsp.mob.onAddEffect(mob, target, damage, dsp.mob.ae.PARALYZE)
+end
 
 function onMobDeath(mob, player, isKiller)
-end;
-
------------------------------------
--- onMobDespawn
------------------------------------
-
-function onMobDespawn(mob)
-
-    -- Set Ose's Window Open Time
-    SetServerVariable("[POP]Ose", os.time() + 3600); -- 1 hour
-    DisallowRespawn(mob:getID(), true);
-
-    -- Set PH back to normal, then set to respawn spawn
-    local PH = GetServerVariable("[PH]Ose");
-    SetServerVariable("[PH]Ose", 0);
-    DisallowRespawn(PH, false);
-    GetMobByID(PH):setRespawnTime(GetMobRespawnTime(PH));
-
-end;
+end

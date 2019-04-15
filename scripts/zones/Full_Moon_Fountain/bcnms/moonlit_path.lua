@@ -2,13 +2,10 @@
 -- Area: Full Moon Fountain
 -- Name: The Moonlit Path
 -----------------------------------
-package.loaded["scripts/zones/Full_Moon_Fountain/TextIDs"] = nil;
------------------------------------
-
-require("scripts/globals/keyitems");
-require("scripts/globals/missions");
-require("scripts/zones/Full_Moon_Fountain/TextIDs");
-
+local ID = require("scripts/zones/Full_Moon_Fountain/IDs")
+require("scripts/globals/keyitems")
+require("scripts/globals/missions")
+require("scripts/globals/quests")
 -----------------------------------
 
 -- What should go here:
@@ -16,7 +13,7 @@ require("scripts/zones/Full_Moon_Fountain/TextIDs");
 --
 -- What should NOT go here:
 -- Handling of "battlefield" status, spawning of monsters,
--- putting loot into treasure pool, 
+-- putting loot into treasure pool,
 -- enforcing ANY rules (SJ/number of people/etc), moving
 -- chars around, playing entrance CSes (entrance CSes go in bcnm.lua)
 
@@ -38,16 +35,16 @@ end;
 
 function onBcnmLeave(player,instance,leavecode)
 -- print("leave code "..leavecode);
-    moonlitPath = player:getQuestStatus(WINDURST,THE_MOONLIT_PATH)
+    moonlitPath = player:getQuestStatus(WINDURST,dsp.quest.id.windurst.THE_MOONLIT_PATH)
     
     if (leavecode == 2) then -- play end CS. Need time and battle id for record keeping + storage
         if (moonlitPath == QUEST_COMPLETED) then
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,0,1);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,0,1);
         else
-            player:startEvent(0x7d01,1,1,1,instance:getTimeInside(),1,0,0);
+            player:startEvent(32001,1,1,1,instance:getTimeInside(),1,0,0);
         end
     elseif (leavecode == 4) then
-        player:startEvent(0x7d02);
+        player:startEvent(32002);
     end
 end;
 
@@ -58,9 +55,9 @@ end;
 function onEventFinish(player,csid,option)
 -- print("bc finish csid "..csid.." and option "..option);
 
-    if (csid == 0x7d01) then
-        player:delKeyItem(MOON_BAUBLE);
-        player:addKeyItem(WHISPER_OF_THE_MOON);
-        player:messageSpecial(KEYITEM_OBTAINED,WHISPER_OF_THE_MOON);
+    if (csid == 32001) then
+        player:delKeyItem(dsp.ki.MOON_BAUBLE);
+        player:addKeyItem(dsp.ki.WHISPER_OF_THE_MOON);
+        player:messageSpecial(ID.text.KEYITEM_OBTAINED,dsp.ki.WHISPER_OF_THE_MOON);
     end
 end;

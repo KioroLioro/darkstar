@@ -117,7 +117,7 @@ time_point CBattlefield::getDeadTime()
 
 const int8* CBattlefield::getBcnmName()
 {
-    return m_name.c_str();
+    return (const int8*)m_name.c_str();
 }
 
 uint8 CBattlefield::getEntrance()
@@ -133,7 +133,7 @@ const BattlefieldRecord& CBattlefield::getRecord() const
 void CBattlefield::setBcnmName(int8* name)
 {
     m_name.clear();
-    m_name.insert(0, name);
+    m_name.insert(0, (const char*)name);
 }
 
 void CBattlefield::setTimeLimit(duration time)
@@ -235,32 +235,24 @@ uint8 CBattlefield::getPlayerMainLevel()
 }
 
 void CBattlefield::capPlayerToBCNM()
-{ //adjust player's level to the appropriate cap and remove buffs
+{
+    //adjust player's level to the appropriate cap and remove buffs
     if (m_PlayerList.size() == 0)
     {
         ShowWarning("battlefield:getPlayerMainLevel - No players in battlefield!\n");
         return;
     }
-    uint8 cap = getLevelCap();
+
+    uint8 cap = std::clamp<uint8>(getLevelCap(), 0, 99);
     if (cap != 0)
-    {   // Other missions lines and things like dragoon quest battle can be done similarly to CoP_Battle_cap.
-        // Might be better to add a type flag to the sql to tell bcnm/isnm/which expansions mission than doing by bcnmID like this.
-        if ((map_config.CoP_Battle_cap == 0) && (m_BcnmID == 768 || m_BcnmID == 800 || m_BcnmID == 832 || m_BcnmID == 960
-            || m_BcnmID == 704 || m_BcnmID == 961 || m_BcnmID == 864 || m_BcnmID == 672 || m_BcnmID == 736 || m_BcnmID == 992 || m_BcnmID == 640))
+    {
+        if (map_config.lv_cap_mission_bcnm == 0 && m_isMission == 1)
         {
             cap = 99;
         }
-        if (cap < 99 && cap > 1)
+        else if (cap < 99 && cap > 0)
         {
             cap = cap + map_config.Battle_cap_tweak;
-        }
-        if (cap > 99)
-        {
-            cap = 99;
-        }
-        if (cap < 1)
-        {
-            cap = 1;
         }
 
         for (const auto& player : m_PlayerList)
@@ -522,8 +514,8 @@ void CBattlefield::cleanup()
         ShowError("Battlefield handler is null from Battlefield BCNM %i Inst %i \n", m_BcnmID, m_BattlefieldNumber);
     }
 
-    const int8* fmtQuery = "UPDATE bcnm_info SET fastestTime = %u, fastestPartySize =  %u, fastestName = '%s'";
-    Sql_Query(SqlHandle, fmtQuery, std::chrono::duration_cast<std::chrono::seconds>(m_record.clearTime).count(), m_record.partySize, m_record.name.c_str());
+    const char* fmtQuery = "UPDATE bcnm_info SET fastestTime = %u, fastestPartySize =  %u, fastestName = '%s' WHERE bcnmId = %u";
+    Sql_Query(SqlHandle, fmtQuery, std::chrono::duration_cast<std::chrono::seconds>(m_record.clearTime).count(), m_record.partySize, m_record.name.c_str(), m_BcnmID);
 
     m_Handler->wipeBattlefield(this);
     delete this;
@@ -554,7 +546,7 @@ void CBattlefield::beforeCleanup()
             {
                 if (PChar)
                 {
-                    setRecord(PChar->GetName(), (uint8)m_PlayerList.size(), clearTime);
+                    setRecord((const char*)PChar->GetName(), (uint8)m_PlayerList.size(), clearTime);
                     break;
                 }
             }
@@ -677,7 +669,7 @@ void CBattlefield::cleanupDynamis()
     ShowDebug("Dynamis cleanup id:%i \n", this->getID());
 
     //get all mob of this dyna zone
-    const int8* fmtQuery = "SELECT msp.mobid \
+    const char* fmtQuery = "SELECT msp.mobid \
                             FROM mob_spawn_points msp \
                             LEFT JOIN mob_groups mg ON mg.groupid = msp.groupid \
                             WHERE zoneid = %u";

@@ -2,18 +2,7 @@
 -- Area: Pso'xja
 --  MOB: Nunyunuwi
 -----------------------------------
-
 require("scripts/globals/missions");
-
------------------------------------
--- onMobSpawn
------------------------------------
-
-function onMobSpawn(mob)
-end;
-
------------------------------------
--- onMobDeath
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)

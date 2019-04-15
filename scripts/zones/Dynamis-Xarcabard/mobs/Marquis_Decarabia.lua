@@ -2,26 +2,9 @@
 -- Area: Dynamis Xarcabard
 --  MOB: Marquis Decarabia
 -----------------------------------
-
 require("scripts/globals/dynamis");
-require("scripts/zones/Dynamis-Xarcabard/TextIDs");
-
------------------------------------
--- onMobEngaged
------------------------------------
-
-function onMobEngaged(mob,target)
-end;
-
------------------------------------
--- onMobFight Action
------------------------------------
-
-function onMobFight(mob,target)
-end;
-
------------------------------------
--- onMobDeath
+local ID = require("scripts/zones/Dynamis-Xarcabard/IDs");
+mixins = {require("scripts/mixins/job_special")}
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
@@ -47,7 +30,7 @@ function onMobDeath(mob, player, isKiller)
     end
 
     if (Animate_Trigger == 32767) then
-        player:messageSpecial(PRISON_OF_SOULS_HAS_SET_FREE);
+        player:messageSpecial(ID.text.PRISON_OF_SOULS_HAS_SET_FREE);
     end
 
 end;

@@ -2,13 +2,9 @@
 -- Area: West Ronfaure
 --  MOB: Tunnel Worm
 -----------------------------------
-
-require("scripts/globals/fieldsofvalor");
-
------------------------------------
--- onMobDeath
+require("scripts/globals/regimes")
 -----------------------------------
 
 function onMobDeath(mob, player, isKiller)
-    checkRegime(player,mob,1,1);
+    dsp.regime.checkRegime(player, mob, 1, 1, dsp.regime.type.FIELDS)
 end;
